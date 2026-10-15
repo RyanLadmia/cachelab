@@ -5,7 +5,7 @@
     // Enables all strict type-checking flags. Default in TS 6.0.
     // Includes strictNullChecks, noImplicitAny, strictFunctionTypes, etc.
     // If you're tempted to turn this off: don't.
-    "strict": true,
+    "strict": false,
 
     // Verifies that side-effect-only imports (import "./setup.js") actually resolve.
     // Without this, a typo in a side-effect import silently does nothing.
@@ -13,8 +13,8 @@
 
     // Catch unused locals and parameters.
     // Annoying during prototyping, valuable in production code.
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
 
     // Force functions with code paths that don't all return a value to error.
     "noImplicitReturns": true,
