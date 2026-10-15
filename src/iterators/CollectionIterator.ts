@@ -1,4 +1,4 @@
-import { MyCollection, Slot } from "./collectionType";
+import { MyCollection, Slot } from "../model/CollectionType";
 
 class IterableCollection<T>{
 

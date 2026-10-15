@@ -1,4 +1,4 @@
-import { MyCollection } from "./collectionType";
+import { MyCollection } from "../model/CollectionType";
 import { createHash } from "crypto";
 
 // type HashmapValue = {
