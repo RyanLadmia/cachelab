@@ -29,6 +29,7 @@ export default class HashMap<K extends PropertyKey, V>{
     private collection: MyCollection<HashmapValue<K, V>> = Array(8).fill(undefined)
     private loadFactor = 0.75;
 
+    // resature hashmap from cache.json
     async load() {
         await ensureStore();
         const file = await fs.readFile(DATA_FILE, "utf-8");
