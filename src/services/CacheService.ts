@@ -1,5 +1,6 @@
 import { MyCollection } from "../model/CollectionType";
 import { createHash } from "crypto";
+import { HashmapValue } from "../model/HashMapValue";
 
 // type HashmapValue = {
 //     key: PropertyKey;
@@ -33,13 +34,8 @@ import { createHash } from "crypto";
 
 // Steps :
 
-// To type
-type HashmapValue<K extends PropertyKey, V> = {
-    key: K;
-    value: V;
-}
 
-//define class 
+//Define class 
 class HashMap<K extends PropertyKey, V>{
     private collection: MyCollection<HashmapValue<K, V>> = Array(8).fill(undefined)
     private loadFactor = 0.75;
@@ -53,6 +49,7 @@ class HashMap<K extends PropertyKey, V>{
         // Hash the key
         const hash = createHash(key);
         console.log(hash);
+
         // Convert hash to hexadecimal
         const hashHex = hash.digest("hex");
         console.log(hashHex);
@@ -64,5 +61,11 @@ class HashMap<K extends PropertyKey, V>{
         // Calculate index
         const index = hashToInt % this.collection.length;
         console.log(index);
+
+        // Insert and handle collision
+        const bucket = this.collection[index];
+
+
+        
     }
 }
