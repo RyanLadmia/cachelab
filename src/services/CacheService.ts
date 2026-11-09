@@ -72,7 +72,7 @@ export default class HashMap<K extends PropertyKey, V>{
     async collisionManagement(index: number, newValue: HashmapValue<K, V>) {
         const currentBucket = this.collection[index];
 
-        if (currentBucket !== undefined) {
+        if (currentBucket !== null) {
             
             if (!Array.isArray(currentBucket)) {
                 console.log("convertir to array");
