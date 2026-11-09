@@ -1,37 +1,9 @@
 import { MyCollection } from "../model/CollectionType";
 import { createHash } from "crypto";
+import { promises as fs } from "fs";
+import path from "path";
+import { stringify } from "querystring";
 
-// type HashmapValue = {
-//     key: PropertyKey;
-//     value: PropertyKey;
-// }
-
-// class HashMap<T> {
-
-//     private collection : MyCollection<T> = Array(8);
-//     private loadFactor = 0.75;
-//     private hashMapLenght = this.collection.length;
-
-//     insert(newValue: HashmapValue){
-//         //to do : verifier le load factor
-//         let key =  Object.keys(newValue)[0];
-//         console.log(key);
-        
-//         // Le hashage attend une string
-//         let hash = createHash("aes-192-cbc");
-//         hash.update(key);
-
-//         const hashSlice = hash.digest().subarray(0, this.hashMapLenght);
-//         console.log(hash);
-
-//         const hashToInt = parseInt(hashSlice, 16)
-
-//         let hashSplit = hash.split()
-//     }  
-
-
-
-// Steps :
 
 // To type
 type HashmapValue<K extends PropertyKey, V> = {
@@ -39,12 +11,34 @@ type HashmapValue<K extends PropertyKey, V> = {
     value: V;
 }
 
+const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_FILE = path.join(DATA_DIR, "cache.json");
+
+// Check if Folder data and cache.json file exists
+async function ensureStore() {
+    await fs.mkdir(DATA_DIR, { recursive: true}); // avoid error if data folder doesn't exists
+    try {
+        await fs.access(DATA_FILE);
+    } catch {
+        await fs.writeFile( DATA_FILE, JSON.stringify(Array(8).fill(undefined)), "utf-8");
+    }
+}
+
 //define class 
 export default class HashMap<K extends PropertyKey, V>{
     private collection: MyCollection<HashmapValue<K, V>> = Array(8).fill(undefined)
     private loadFactor = 0.75;
 
-    insert(newValue: HashmapValue<K, V>) {
+    async load() {
+        await ensureStore();
+        const file = await fs.readFile(DATA_FILE, "utf-8");
+        if (!file.trim()) return;
+        this.collection = JSON.parse(file);
+    }
+
+     async insert(newValue: HashmapValue<K, V>) {
+        // Check data folder and cache.json exists
+        await ensureStore();
 
         // Get the key
         const key = String(newValue.key);
@@ -67,6 +61,12 @@ export default class HashMap<K extends PropertyKey, V>{
         console.log(index);
 
         this.collection[index] = newValue
+
+        await fs.writeFile(
+            DATA_FILE,
+            JSON.stringify(this.collection, null, 2),
+            "utf-8"
+        );
 
         console.log(this.collection, "lolol")
     }
