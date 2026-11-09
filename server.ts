@@ -13,8 +13,12 @@ fastify.get('/', function (request, reply) {
     toto.insert({key: "erlkjher", value:"joris"})
     toto.insert({key: "hhhgjf", value:"joris"})
     toto.insert({key: "bnbnb", value:"joris"})
+    toto.insert({key: "bnbnb", value:"joris"})
+    toto.insert({key: "zzzz", value:"joris"})
+    toto.insert({key: "zzzz", value:"joris"})
     toto.insert({key: "zzzz", value:"joris"})
     toto.insert({key: "oooo", value:"joris"})
+    
     return "plop"
 })
 
