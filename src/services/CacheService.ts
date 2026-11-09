@@ -71,7 +71,7 @@ export default class HashMap<K extends PropertyKey, V>{
             "utf-8"
         );
 
-        console.table(this.collection);
+        console.log(this.collection), "lolol";
         console.log("\n_________________________________________________________________________________________________________________________\n")
     }
 }
