@@ -1,4 +1,6 @@
 import Fastify from 'fastify'
+import HashMap from './src/services/CacheService'
+
 
 const fastify = Fastify({
   logger: true
@@ -6,8 +8,8 @@ const fastify = Fastify({
 
 // Declare a route
 fastify.get('/', function (request, reply) {
-    reply.send({ hello: 'worldo' })
-} )
+    return new HashMap().insert({key: "name", value:"joris"});
+})
 
 // Run the server
 fastify.listen({port: 3001}, function (err, address) {

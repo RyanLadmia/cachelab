@@ -1,13 +1,12 @@
 import { MyCollection, Slot } from "../model/CollectionType";
 
-class IterableCollection<T>{
+export default class CollectionIterator<T>{
 
     private collection: MyCollection<T>;
     private index = 0;
 
     constructor(collection: Array<T>){
         this.collection = collection;
-
     }
 
     getNext(){

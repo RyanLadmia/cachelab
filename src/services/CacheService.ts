@@ -40,7 +40,7 @@ type HashmapValue<K extends PropertyKey, V> = {
 }
 
 //define class 
-class HashMap<K extends PropertyKey, V>{
+export default class HashMap<K extends PropertyKey, V>{
     private collection: MyCollection<HashmapValue<K, V>> = Array(8).fill(undefined)
     private loadFactor = 0.75;
 
@@ -48,17 +48,18 @@ class HashMap<K extends PropertyKey, V>{
 
         // Get the key
         const key = String(newValue.key);
-        console.log(key);
+        console.log(key, 'key');
 
         // Hash the key
-        const hash = createHash(key);
-        console.log(hash);
+        const hash = createHash('sha256').update(key);        
+        console.log(hash, "hash");
         // Convert hash to hexadecimal
         const hashHex = hash.digest("hex");
-        console.log(hashHex);
+        console.log(hashHex, "hashhex");
 
         // Convert 8 first hex caracters to int
-        const hashToInt = parseInt(hashHex.slice(0, 8), 16);
+        // total is 10 due to base int16, wich counter out of 16 and not of 10, which add 2 symbols with parsin at the end 
+        const hashToInt = parseInt(hashHex.slice(0, 8), 16); 
         console.log(hashToInt);
 
         // Calculate index
