@@ -62,6 +62,7 @@ export default class HashMap<K extends PropertyKey, V>{
 
         this.collection[index] = newValue
 
+        // Edit the cache.json file
         await fs.writeFile(
             DATA_FILE,
             JSON.stringify(this.collection, null, 2),
