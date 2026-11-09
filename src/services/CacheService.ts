@@ -1,6 +1,7 @@
+import { HashmapValue } from './../model/HashMapValue';
 import { MyCollection } from "../model/CollectionType";
 import { createHash } from "crypto";
-import { HashmapValue } from "../model/HashMapValue";
+import { CacheEntry } from '../model/CacheEntity';
 
 // type HashmapValue = {
 //     key: PropertyKey;
@@ -64,8 +65,11 @@ class HashMap<K extends PropertyKey, V>{
 
         // Insert and handle collision
         const bucket = this.collection[index];
-
+        // crypt sha256
 
         
     }
+
+    
+
 }
