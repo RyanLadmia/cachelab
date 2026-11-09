@@ -65,5 +65,9 @@ export default class HashMap<K extends PropertyKey, V>{
         // Calculate index
         const index = hashToInt % this.collection.length;
         console.log(index);
+
+        this.collection[index] = newValue
+
+        console.log(this.collection, "lolol")
     }
 }

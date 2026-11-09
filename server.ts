@@ -8,7 +8,14 @@ const fastify = Fastify({
 
 // Declare a route
 fastify.get('/', function (request, reply) {
-    return new HashMap().insert({key: "name", value:"joris"});
+    let toto = new HashMap()
+    toto.insert({key: "name", value:"joris"});
+    toto.insert({key: "erlkjher", value:"joris"})
+    toto.insert({key: "hhhgjf", value:"joris"})
+    toto.insert({key: "bnbnb", value:"joris"})
+    toto.insert({key: "zzzz", value:"joris"})
+    toto.insert({key: "oooo", value:"joris"})
+    return "plop"
 })
 
 // Run the server
