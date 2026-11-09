@@ -29,6 +29,7 @@ export default class HashMap<K extends PropertyKey, V>{
     private collection: MyCollection<HashmapValue<K, V>> = Array(8).fill(undefined)
     private loadFactor = 0.75;
 
+    // resature hashmap from cache.json
     async load() {
         await ensureStore();
         const file = await fs.readFile(DATA_FILE, "utf-8");
@@ -42,23 +43,24 @@ export default class HashMap<K extends PropertyKey, V>{
 
         // Get the key
         const key = String(newValue.key);
-        console.log(key, 'key');
+        console.log('key : ', key);
 
         // Hash the key
         const hash = createHash('sha256').update(key);        
-        console.log(hash, "hash");
+        console.log("hash : ", hash);
+
         // Convert hash to hexadecimal
         const hashHex = hash.digest("hex");
-        console.log(hashHex, "hashhex");
+        console.log("hashhex : ", hashHex);
 
         // Convert 8 first hex caracters to int
         // total is 10 due to base int16, wich counter out of 16 and not of 10, which add 2 symbols with parsin at the end 
         const hashToInt = parseInt(hashHex.slice(0, 8), 16); 
-        console.log(hashToInt);
+        console.log("hashToInt : ", hashToInt);
 
         // Calculate index
         const index = hashToInt % this.collection.length;
-        console.log(index);
+        console.log("index : ", index);
 
         this.collection[index] = newValue
 
@@ -69,6 +71,7 @@ export default class HashMap<K extends PropertyKey, V>{
             "utf-8"
         );
 
-        console.log(this.collection, "lolol")
+        console.table(this.collection);
+        console.log("\n_________________________________________________________________________________________________________________________\n")
     }
 }
