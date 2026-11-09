@@ -61,10 +61,6 @@ export default class HashMap<K extends PropertyKey, V>{
         const index = hashToInt % this.collection.length;
         console.log(index);
 
-        // Insert and handle collision
-        const bucket = this.collection[index];
-        // crypt sha256
-
         this.collection[index] = newValue
 
         console.log(this.collection, "lolol")
