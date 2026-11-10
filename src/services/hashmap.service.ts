@@ -148,13 +148,63 @@ export default class HashMap<K extends PropertyKey, V> {
     
     verifyLoadFactor(): void {}
 
+    getAllKeys(): K[] {
+        const keys: K[] = [];
+    
+        for (const bucket of this.collection) {
+            if (bucket === null) continue;
+    
+            if (Array.isArray(bucket)) {
+                for (const entry of bucket) {
+                    keys.push(entry.key);
+                }
+            } else {
+                keys.push(bucket.key);
+            }
+        }
+    
+        console.log(keys);
+        return keys;
+    }
 
+    getKeyValue(key : K): V | null {
+        let value: V | null = null;
 
-    // getAllEntries(): HashmapValue<K, V | null> [] {
-    //     let allEntries = this.collection
-    //     if (allEntries == null){
-    //         return
-    //     }
-         
+       for (const bucket of this.collection) {
+            if (bucket === null) continue;
+
+            if (Array.isArray(bucket)) {
+                for (const entry of bucket) {
+                    if (key === entry.key ) {
+                        value = entry.value;
+                    }
+                } 
+            } else {
+                if (key === bucket.key ){
+                    value = bucket.value;
+                }
+            }
+       }
+        return value;
+    }
+
+    // updateKeyValue(key : K, value : V): void {
+    //     let newValue: V | null = null;
+
+    //    for (const bucket of this.collection) {
+    //         if (bucket === null) continue;
+
+    //         if (Array.isArray(bucket)) {
+    //             for (const entry of bucket) {
+    //                 if (key === entry.key ) {
+    //                     newValue = entry.value;
+    //                 }
+    //             } 
+    //         } else {
+    //             if (key === bucket.key ){
+    //                 value = bucket.value;
+    //             }
+    //         }
+    //    }
     // }
 }
