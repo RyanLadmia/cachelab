@@ -1,3 +1,4 @@
+import { MyCollection } from './../model/CollectionType';
 import { createHash } from "crypto";
 import { promises as fs } from "fs";
 import DataStorage from "./data-storage.service";
@@ -146,4 +147,14 @@ export default class HashMap<K extends PropertyKey, V> {
     }
     
     verifyLoadFactor(): void {}
+
+
+
+    // getAllEntries(): HashmapValue<K, V | null> [] {
+    //     let allEntries = this.collection
+    //     if (allEntries == null){
+    //         return
+    //     }
+         
+    // }
 }
