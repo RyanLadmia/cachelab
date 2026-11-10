@@ -1,9 +1,13 @@
 import Fastify from 'fastify'
-import HashMap from './src/services/CacheService'
+import HashMap from './src/services/HashMap.service'
 
 
 const fastify = Fastify({
   logger: true
+})
+
+fastify.get('/cached-data', async function (request, reply) {
+
 })
 
 // Declare a route

@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { promises as fs } from "fs";
-import path from "path";
+import DataStorage from "./data-storage.service";
 
 type HashmapValue<K extends PropertyKey, V> = {
     key: K;
@@ -9,20 +9,7 @@ type HashmapValue<K extends PropertyKey, V> = {
 
 type Bucket<K extends PropertyKey, V> = HashmapValue<K, V | null> | HashmapValue<K, V | null>[] | null;
 
-// Backup folder name
-const DATA_DIR = path.join(process.cwd(), "data");
-// Backup file name
-const DATA_FILE = path.join(DATA_DIR, "cache.json");
 
-// Check if Folder data and cache.json file exists
-async function ensureStore() {
-    await fs.mkdir(DATA_DIR, { recursive: true }); // avoid error if data folder doesn't exists
-    try {
-        await fs.access(DATA_FILE);
-    } catch {
-        await fs.writeFile(DATA_FILE, JSON.stringify(Array(8).fill(null)), "utf-8");
-    }
-}
 
 //define class 
 export default class HashMap<K extends PropertyKey, V> {
@@ -35,6 +22,8 @@ export default class HashMap<K extends PropertyKey, V> {
     private currentLoad: number = 0; // Va recalculer entierement le load a chaque fois
     // Pourrait être incrémenté depuis le début, mais il y a des risques en cas de coupure
     // Pourra émettre un nombre dans la sauvegarde pour savoir ou on en était 
+
+    private dataStorage : DataStorage = new DataStorage()
 
 
     computeLoadFactor(): void {
@@ -61,9 +50,9 @@ export default class HashMap<K extends PropertyKey, V> {
     // resature hashmap from cache.json
     // Fusion de load() et onStart() pour tout initialiser correctement au démarrage
     async onStart(): Promise<void> {
-        await ensureStore();
+        await this.dataStorage.ensureStore();
         
-        const file = await fs.readFile(DATA_FILE, "utf-8");
+        const file = await fs.readFile(this.dataStorage.DATA_FILE, "utf-8");
         if (file.trim()) {
             const parsedData = JSON.parse(file);
             this.collection = parsedData;
@@ -76,10 +65,9 @@ export default class HashMap<K extends PropertyKey, V> {
         this.computeCurrentLoad();
     }
 
-    // Nouvelle méthode insert asynchrone (merge avec la sauvegarde)
     async insert(newValue: HashmapValue<K, V | null>): Promise<void> {
         // Check data folder and cache.json exists
-        await ensureStore();
+        await this.dataStorage.ensureStore();
 
         if (this.currentLoad + 1 > this.indexLimitFactor) {
             this.rehashing();
@@ -90,7 +78,7 @@ export default class HashMap<K extends PropertyKey, V> {
 
         // Edit the cache.json file après l'insertion (et le potentiel rehashing)
         await fs.writeFile(
-            DATA_FILE,
+            this.dataStorage.DATA_FILE,
             JSON.stringify(this.collection, null, 2),
             "utf-8"
         );
@@ -148,7 +136,6 @@ export default class HashMap<K extends PropertyKey, V> {
                     element.forEach((subElement) => {
                         this.hashEntry(subElement, rehashedBucket)
                     });
-                    // utiliser la logique de hashEntry, mais d'abord refacto insert pour adapter l'insertion sur la collection
                 } else {
                     this.hashEntry(element, rehashedBucket)
                 }
