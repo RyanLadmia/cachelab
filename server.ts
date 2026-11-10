@@ -1,5 +1,5 @@
 import Fastify from 'fastify'
-import HashMap from './src/services/HashMap.service'
+import HashMap from './src/services/hashmap.service'
 
 
 const fastify = Fastify({
