@@ -87,7 +87,6 @@ export default class HashMap<K extends PropertyKey, V> {
         console.log("\n_________________________________________________________________________________________________________________________\n");
     }
 
-    // Les méthodes internes de calcul restent synchrones car elles ne touchent qu'à la RAM
     hashEntry(newValue: HashmapValue<K, V | null>, targetArray: Bucket<K, V>[]): void {
 
         // Get the key

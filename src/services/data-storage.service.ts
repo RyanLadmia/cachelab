@@ -22,23 +22,23 @@ export default class DataStorage {
         this.DATA_FILE = value
     }
 
-    async listStore(){
+    async listStore(): Promise<string[]> {
         await fs.mkdir(this.DATA_DIR, { recursive: true });
 
         let fileList: string[] = [];
         try {
-            const files = await fs.readdir(this.DATA_DIR)
-            console.log(files, 'avant traitement')
-
+            const files = await fs.readdir(this.DATA_DIR);
+            
             files.forEach(file => {
-                fileList.push(file)
-                console.log(file);
+                if (file.endsWith('.json')) {
+                    fileList.push(file);
+                }
             });
             
-            console.log(fileList,"list des fichiers après traitement")
-            
+            return fileList; 
         } catch (error) {
-            
+            console.error("Erreur listStore:", error);
+            return [];
         }
     }
 
