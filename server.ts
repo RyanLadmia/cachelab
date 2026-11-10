@@ -13,6 +13,7 @@ fastify.get('/cached-data', async function (request, reply) {
 // Declare a route
 fastify.get('/', async function (request, reply) {
     let toto = new HashMap()
+    await toto.onStart();
     await toto.insert({key: "name", value:"joris"});
     await toto.insert({key: "erlkjher", value:"joris"})
     await toto.insert({key: "hhhgjf", value:"joris"})
