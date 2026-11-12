@@ -8,168 +8,124 @@ import HashMap from './src/services/hashmap.service';
 import DataStorage from './src/services/data-storage.service';
 import DataSeeder from './src/services/data-seed-storage.service';
 import InsertionWorker from './src/worker/insertion.worker';
-
-let insertionWorker = new InsertionWorker()
-let dataSeeder = new DataSeeder()
-// refaire les typages de routes 
+import { MyHashMapController } from './src/controllers/hashmap-controllers';
 
 const fastify = Fastify({
     logger: true
 });
 
-fastify.register(cors, {
-    origin: true
-});
+async function main() {
+    fastify.register(cors, { origin: true });
 
-fastify.register(fastifyStatic, {
-    root: path.join(process.cwd(), 'src', 'UI'),
-    prefix: '/UI/',
-    index: 'index.html'
-});
+    fastify.register(fastifyStatic, {
+        root: path.join(process.cwd(), 'src', 'UI'),
+        prefix: '/UI/',
+        index: 'index.html'
+    });
 
-fastify.get('/UI', (request, reply) => {
-    reply.redirect('/UI/');
-});
-
-fastify.get('/api/files', async (request, reply) => {
-    let storage = new DataStorage();
-    return await storage.listStore();
-});
-
-fastify.get('/api/files/:name', async (request, reply) => {
-    const { name } = request.params as { name: string };
-
-    const filePath = path.join(process.cwd(), 'data', name);
+    let insertionWorker = new InsertionWorker();
+    let dataSeeder = new DataSeeder();
+    const cache = new HashMap<string, string>();
     
-    try {
-        const fileContent = await fs.readFile(filePath, 'utf-8');
-        return JSON.parse(fileContent || "[]");
-    } catch (error) {
-        return reply.code(404).send({ error: "Fichier introuvable" });
-    }
-});
+    await cache.onStart();
 
-fastify.delete('/api/files/:name', async (request, reply) => {
-    const { name } = request.params as { name: string };
+    const hashMapController = MyHashMapController(cache);
 
-    let storage = new DataStorage();
-    await storage.deleteDataFile(name);
-    return { success: true };
-});
+    // --- UI ROUTES ---
+    fastify.get('/UI', (request, reply) => {
+        reply.redirect('/UI/');
+    });
 
-fastify.post('/api/files', async (request, reply) => {
-    const { filename } = request.body as { filename: string };
+    // --- BASE ROUTE ---
+    fastify.get('/', async function() {
+        return { status: 'OK\n' };
+    });
 
-    const dataDir = path.join(process.cwd(), 'data');
-    const filePath = path.join(dataDir, filename);
-    
-    await fs.mkdir(dataDir, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(Array(8).fill(null)), "utf-8");
-    
-    return { success: true };
-});
+    // --- CRUD HASHMAP ROUTES (via Controller) ---
+    fastify.get('/keys', hashMapController.getAll);
+    fastify.get('/keys/:key', hashMapController.getOne);
+    fastify.post('/keys', hashMapController.create);
+    fastify.put('/keys/:key', hashMapController.update);
+    fastify.delete('/keys/:key', hashMapController.remove);
 
-fastify.post('/api/insert', async (request, reply) => {
-    const { filename, key, value } = request.body as { filename: string, key: string, value: any };
-    
-    let map = new HashMap<string, any>();
-        
-    const dataDirectory = path.join(process.cwd(), 'data');
-    const targetFilePath = path.join(dataDirectory, filename);
+    // --- FILE MANAGER ROUTES ---
+    fastify.get('/api/files', async (request, reply) => {
+        let storage = new DataStorage();
+        return await storage.listStore();
+    });
 
-    const storageService = (map as any).dataStorage;
-
-    storageService.selectDataFile(targetFilePath);    
-
-    await map.onStart(); 
-    
-    await map.insert({ key, value });
-    
-    return { success: true };
-});
-
-fastify.post('/api/insert/:hashmap', async (request, reply) => {
-    const { filename, key, value } = request.body as { filename: string, key: string, value: any };
-    
-    let map = new HashMap<string, any>();
-        
-    const dataDirectory = path.join(process.cwd(), 'data');
-    const targetFilePath = path.join(dataDirectory, filename);
-
-    const storageService = (map as any).dataStorage;
-
-    storageService.selectDataFile(targetFilePath);    
-
-    await map.onStart(); 
-    
-    await map.insert({ key, value });
-    
-    return { success: true };
-});
-
-// route de test 
-fastify.get('/', async function (request, reply) {
-    let toto = new HashMap<string, string>();
-    await toto.onStart(); 
-    
-    await toto.insert({key: "name", value:"joris"});
-    await toto.insert({key: "erlkjher", value:"joris"});
-    await toto.insert({key: "hhhgjf", value:"joris"});
-    await toto.insert({key: "bnbnb", value:"joris"});
-    await toto.insert({key: "zzzz", value:"joris"});
-    await toto.insert({key: "oooo", value:"joris"});
-    
-    return "Données par défaut insérées";
-});
-
-fastify.get('/data-seeder', async function (request, reply){
-    
-    console.log(request.query, 'query');
-    
-    const query = request.query as { numberOfInsertion: string };
-
-    const numberOfInsertion = parseInt(query.numberOfInsertion, 10);
-
-    dataSeeder.selectDataFile("init.json");
-
-    const result = await dataSeeder.seedFile(numberOfInsertion);
-
-    if(result)
-        return { success: true };
-    else
-        return { success: false }; 
-});
-
-fastify.get('/seed', async function (request, reply) {
-    try {
-        const result = await insertionWorker.processSeeding();
-        
-        if (result.success) {
-            return { 
-                success: true, 
-                message: `${result.count} entrées insérées avec succès.` 
-            };
-        } else {
-            return { 
-                success: false, 
-                message: "Rien n'a été inséré." 
-            };
+    fastify.get('/api/files/:name', async (request, reply) => {
+        const { name } = request.params as { name: string };
+        const filePath = path.join(process.cwd(), 'data', name);
+        try {
+            const fileContent = await fs.readFile(filePath, 'utf-8');
+            return JSON.parse(fileContent || "[]");
+        } catch (error) {
+            return reply.code(404).send({ error: "Fichier introuvable" });
         }
+    });
 
-    } catch (error) {
-        console.error("Erreur fatale lors du seeding :", error);
-        return reply.code(500).send({ success: false, error: "Erreur serveur" });
-    }
+    fastify.delete('/api/files/:name', async (request, reply) => {
+        const { name } = request.params as { name: string };
+        let storage = new DataStorage();
+        await storage.deleteDataFile(name);
+        return { success: true };
+    });
+
+    fastify.post('/api/files', async (request, reply) => {
+        const { filename } = request.body as { filename: string };
+        const dataDir = path.join(process.cwd(), 'data');
+        const filePath = path.join(dataDir, filename);
+        await fs.mkdir(dataDir, { recursive: true });
+        await fs.writeFile(filePath, JSON.stringify(Array(8).fill(null)), "utf-8");
+        return { success: true };
+    });
+
+    // --- INSERTION ROUTES ---
+    fastify.post('/api/insert', async (request, reply) => {
+        const { filename, key, value } = request.body as { filename: string, key: string, value: any };
+        let map = new HashMap<string, any>();
+        const targetFilePath = path.join(process.cwd(), 'data', filename);
+        
+        map.setStorageFile(targetFilePath);    
+        await map.onStart(); 
+        await map.insert({ key, value });
+        return { success: true };
+    });
+
+    // --- WORKER & SEEDER ROUTES ---
+    fastify.get('/data-seeder', async function (request, reply){
+        const query = request.query as { numberOfInsertion: string };
+        const numberOfInsertion = parseInt(query.numberOfInsertion, 10);
+
+        dataSeeder.selectDataFile("init.json");
+        const result = await dataSeeder.seedFile(numberOfInsertion);
+
+        if(result) return { success: true };
+        else return { success: false }; 
+    });
+
+    fastify.get('/seed', async function (request, reply) {
+        try {
+            const result = await insertionWorker.processSeeding();
+            
+            if (result.success) {
+                return { success: true, message: `${result.count} entrées insérées avec succès.` };
+            } else {
+                return { success: false, message: "Rien n'a été inséré." };
+            }
+        } catch (error) {
+            console.error("Erreur fatale lors du seeding :", error);
+            return reply.code(500).send({ success: false, error: "Erreur serveur" });
+        }
+    });
+
+    // Démarrage du serveur
+    await fastify.listen({ port: 3001, host: '0.0.0.0' });
+    fastify.log.info(`Serveur lancé sur http://127.0.0.1:3001`);
+}
+
+main().catch((err) => {
+    console.error(err, "\n");
+    process.exit(1);
 });
-
-const start = async () => {
-    try {
-        await fastify.listen({ port: 3001, host: "0.0.0.0" });
-        fastify.log.info(`Serveur lancé sur http://127.0.0.1:3001`);
-    } catch (err) {
-        fastify.log.error(err);
-        process.exit(1);
-    }
-};
-
-start();

@@ -1,13 +1,15 @@
 import { createHash } from "crypto";
-import { promises as fs } from "fs";
 import DataStorage from "./data-storage.service";
 
-type HashmapValue<K extends PropertyKey, V> = { // a refacto ailleurs
+type HashmapValue<K extends PropertyKey, V> = { 
     key: K;
     value: V;
 }
 
-type Bucket<K extends PropertyKey, V> = HashmapValue<K, V | null> | HashmapValue<K, V | null>[] | null;
+type Bucket<K extends PropertyKey, V> = 
+    | HashmapValue<K, V | null> 
+    | HashmapValue<K, V | null>[] 
+    | null;
 
 export default class HashMap<K extends PropertyKey, V> {
     
@@ -15,13 +17,45 @@ export default class HashMap<K extends PropertyKey, V> {
     private currentLength = this.BASE_LENGTH;
     private collection: Bucket<K, V>[] = new Array(this.BASE_LENGTH).fill(null);
     private loadFactor: number = 0.75;
-    private indexLimitFactor: number = 0; // servira a ne pas tt le temps recalculer et avoir des paliers
-    private currentLoad: number = 0; // Va recalculer entierement le load a chaque fois
-    // Pourrait être incrémenté depuis le début, mais il y a des risques en cas de coupure
-    // Pourra émettre un nombre dans la sauvegarde pour savoir ou on en était 
+    private indexLimitFactor: number = 0; 
+    private currentLoad: number = 0; 
+    private dataStorage : DataStorage = new DataStorage();
 
-    private dataStorage : DataStorage = new DataStorage()
+    // Variables pour le batching en mémoire
+    private unsavedInsertions: number = 0;
+    private readonly BATCH_SAVE_LIMIT: number = 500;
 
+    private getIndex(key: K, length: number = this.collection.length): number {
+         const hash = createHash('sha256').update(String(key));        
+         const hashHex = hash.digest("hex");
+         const hashToInt = parseInt(hashHex.slice(0, 8), 16); 
+         return hashToInt % length; 
+    }
+
+    private findEntry(key: K): HashmapValue<K, V | null> | null {
+        const index = this.getIndex(key);
+        const bucket = this.collection[index];
+
+        if (bucket === null) {
+            return null;
+        }
+        if (Array.isArray(bucket)) {
+            for (const entry of bucket) {
+                if (entry.key === key) {
+                    return entry; 
+                }
+            }
+            return null; 
+        }
+        if (bucket.key === key) {
+            return bucket;
+        }
+        return null; 
+    }
+
+    private async persist(): Promise<void> {
+        await this.dataStorage.save(this.collection);
+    }
 
     computeLoadFactor(): void {
         this.indexLimitFactor = this.currentLength * this.loadFactor;
@@ -33,7 +67,6 @@ export default class HashMap<K extends PropertyKey, V> {
 
     computeCurrentLoad(): void {
         let load = 0;
-
         for (const bucket of this.collection) {
             if (bucket !== null) {
                 if (Array.isArray(bucket)) {
@@ -43,99 +76,68 @@ export default class HashMap<K extends PropertyKey, V> {
                 }
             }
         }
-        
         this.currentLoad = load;
         console.log("Current Load au démarrage :", this.currentLoad);
     }
 
-    // resature hashmap from cache.json // ou d'autre a voir
     async onStart(): Promise<void> {
-        await this.dataStorage.ensureStore();
+        const parsedData = await this.dataStorage.load();
         
-        const file = await fs.readFile(this.dataStorage.DATA_FILE, "utf-8");
-        if (file.trim()) {
-            const parsedData = JSON.parse(file);
-            this.collection = parsedData;
+        if (parsedData) {
+            this.collection = parsedData as Bucket<K, V>[];
             this.currentLength = this.collection.length;
             console.log(`Données chargées depuis le cache, taille : ${this.currentLength}`);
         }
 
-        // On recalcule les limites et la charge basées sur le fichier qu'on vient de charger
         this.computeLoadFactor();
         this.computeCurrentLoad();
     }
 
-// Nouvelles variables à ajouter en haut de votre classe HashMap
-    private unsavedInsertions: number = 0;
-    private readonly BATCH_SAVE_LIMIT: number = 500; // Sauvegarde tous les 500 éléments
-
     async insert(newValue: HashmapValue<K, V | null>): Promise<void> {
-
-        // SUPPRIMÉ : await this.dataStorage.ensureStore(); (c'est déjà fait dans onStart !)
-
+        
+        const existing = this.findEntry(newValue.key);
+        if (existing) {
+            throw new Error(`Key "${String(newValue.key)}" already exists.`);        
+        }
+    
         if (this.currentLoad + 1 > this.indexLimitFactor) {
             this.rehashing();
         }
-        
+    
         this.hashEntry(newValue, this.collection);
         this.currentLoad++;
         this.unsavedInsertions++;
 
-        // SUPPRIMÉ : console.table(this.collection); (C'est ce qui faisait figer votre terminal)
-
-        // On n'écrit sur le disque que si on atteint la limite
         if (this.unsavedInsertions >= this.BATCH_SAVE_LIMIT) {
             await this.saveToDisk();
         }
     }
 
-    // Nouvelle méthode dédiée à la sauvegarde
     async saveToDisk(): Promise<void> {
         if (this.unsavedInsertions === 0) return;
 
-        await this.dataStorage.ensureStore(); // Vérification de sécurité
-        await fs.writeFile(
-            this.dataStorage.DATA_FILE,
-            JSON.stringify(this.collection),
-            "utf-8"
-        );
+        await this.persist();
         
         console.log(`[Batch] Sauvegarde effectuée : ${this.unsavedInsertions} éléments enregistrés sur le disque.`);
-        this.unsavedInsertions = 0; // Remise à zéro
+        console.log("\n____________________________________________________________\n");
+        this.unsavedInsertions = 0; 
     }
 
     hashEntry(newValue: HashmapValue<K, V | null>, targetArray: Bucket<K, V>[]): void {
-
-        // Get the key
-        const key = String(newValue.key);
-        // Hash the key
-        const hash = createHash('sha256').update(key);        
-        // Convert hash to hexadecimal
-        const hashHex = hash.digest("hex");
-        // Convert 8 first hex caracters to int
-        // total is 10 due to base int16, wich counter out of 16 and not of 10, which add 2 symbols with parsin at the end 
-        // slice à 10 a cause de parseInt() 
-        const hashToInt = parseInt(hashHex.slice(0, 8), 16); 
-        // Calculate index
-        const index = hashToInt % targetArray.length; 
-        
-        this.pushOrCollide(index, newValue, targetArray);
+       const index = this.getIndex(newValue.key, targetArray.length);
+       this.pushOrCollide(index, newValue, targetArray);
     }
 
     pushOrCollide(index: number, newValue: HashmapValue<K, V | null>, targetArray: Bucket<K, V>[]): void {
-
-        const currentBucket = targetArray[index]; // On récupère la case cible
+        const currentBucket = targetArray[index]; 
 
         if (currentBucket !== null) {
-            
-            if (!Array.isArray(currentBucket)) { // transform to array
-                console.log("convertir to array");
+            if (!Array.isArray(currentBucket)) { 
                 targetArray[index] = [currentBucket, newValue];
             } else {
-                currentBucket.push(newValue); // push in array
+                currentBucket.push(newValue); 
             }
-            
-        } else { // no collide 
+        } else { 
             targetArray[index] = newValue;
         }
     }
@@ -143,8 +145,7 @@ export default class HashMap<K extends PropertyKey, V> {
     rehashing(): void {
         this.currentLength = this.currentLength * 2
         let previousBucket: Bucket<K, V>[] =  this.collection
-        let rehashedBucket: Bucket<K, V>[] =  new Array(this.currentLength).fill(null) // a été mutiplié par 2
-        // comparer aussi les collisions
+        let rehashedBucket: Bucket<K, V>[] =  new Array(this.currentLength).fill(null) 
 
         previousBucket.forEach((element) => {
             if (element !== null) {
@@ -158,10 +159,86 @@ export default class HashMap<K extends PropertyKey, V> {
             }
         });
 
-        this.collection = rehashedBucket; // Remplacement final
-
+        this.collection = rehashedBucket; 
         this.computeLoadFactor();
     }
     
     verifyLoadFactor(): void {}
+
+    getAllKeys(): K[] {
+        const keys: K[] = [];
+        for (const bucket of this.collection) {
+            if (bucket === null) continue;
+    
+            if (Array.isArray(bucket)) {
+                for (const entry of bucket) {
+                    keys.push(entry.key);
+                }
+            } else {
+                keys.push(bucket.key);
+            }
+        }
+        console.log(keys);
+        return keys;
+    }
+
+    getKeyValue(key: K): V | null {
+        const entry = this.findEntry(key);
+        if (!entry) {
+            return null;
+        }
+        return entry.value;
+    }
+
+    async updateKeyValue(key: K, newValue: V): Promise<boolean> {
+        const entry = this.findEntry(key);
+        if (!entry) {
+            return false;
+        }
+        entry.value = newValue;
+        await this.persist();
+        return true;
+    }
+
+    async deleteKey(key: K): Promise<boolean> {
+        const index = this.getIndex(key);
+        const bucket = this.collection[index];
+
+        if (bucket === null) {
+            return false;
+        }
+        if (Array.isArray(bucket)) {
+            let entryIndex = -1;  
+
+            for (let i = 0; i < bucket.length; i++) {
+                if (bucket[i].key === key) { 
+                    entryIndex = i; 
+                    break;
+                }
+            }
+
+            if (entryIndex === -1) {
+                return false; 
+            }
+
+            bucket.splice(entryIndex, 1); 
+
+            if (bucket.length === 0) {
+                this.collection[index] = null; 
+            } else if (bucket.length === 1) { 
+                this.collection[index] = bucket[0];
+            }
+            this.currentLoad--; 
+            await this.persist();
+            return true;
+        }
+
+        if (bucket.key !== key) { 
+            return false; 
+        }
+        this.collection[index] = null; 
+        this.currentLoad--;
+        await this.persist();
+        return true;
+    }
 }
