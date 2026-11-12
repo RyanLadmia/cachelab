@@ -1,4 +1,3 @@
-import { MyCollection } from './../model/CollectionType';
 import { createHash } from "crypto";
 import { promises as fs } from "fs";
 import DataStorage from "./data-storage.service";
@@ -8,11 +7,11 @@ type HashmapValue<K extends PropertyKey, V> = {
     value: V;
 }
 
-type Bucket<K extends PropertyKey, V> = HashmapValue<K, V | null> | HashmapValue<K, V | null>[] | null;
+type Bucket<K extends PropertyKey, V> = 
+    | HashmapValue<K, V | null> 
+    | HashmapValue<K, V | null>[] 
+    | null;
 
-
-
-//define class 
 export default class HashMap<K extends PropertyKey, V> {
     
     private BASE_LENGTH = 8;
@@ -25,6 +24,47 @@ export default class HashMap<K extends PropertyKey, V> {
     // Pourra émettre un nombre dans la sauvegarde pour savoir ou on en était 
 
     private dataStorage : DataStorage = new DataStorage()
+
+    private getIndex(key: K, length: number = this.collection.length): number {
+         // Hash the key
+         const hash = createHash('sha256').update(String(key));        
+         // Convert hash to hexadecimal
+         const hashHex = hash.digest("hex");
+         // Convert 8 first hex caracters to int
+         // total is 10 due to base int16, wich counter out of 16 and not of 10, which add 2 symbols with parsin at the end 
+         // slice à 10 a cause de parseInt() 
+         const hashToInt = parseInt(hashHex.slice(0, 8), 16); 
+         // Keep the index inside the array bounds
+         return hashToInt % length; 
+    }
+
+    // Find the key and value inside a target bucket
+    // Useful to not duplicate the key and for update
+    private findEntry(key: K): HashmapValue<K, V | null> | null {
+        const index = this.getIndex(key);
+        const bucket = this.collection[index];
+
+        if (bucket === null) {
+            return null; // bucket is null
+        }
+        if (Array.isArray(bucket)) {
+            for (const entry of bucket) {
+                if (entry.key === key) {
+                    return entry; // for multiples entry (collision)
+                }
+            }
+            return null; // key doesn't exists in array
+        }
+        if (bucket.key === key) {
+            return bucket; // for a single entry
+        }
+        return null; // key doen't exists in bucket (no collision)
+    }
+
+    // persist the current collection in a DataStorage 
+    private async persist(): Promise<void> {
+        await this.dataStorage.save(this.collection);
+    }
 
 
     computeLoadFactor(): void {
@@ -48,63 +88,47 @@ export default class HashMap<K extends PropertyKey, V> {
         console.log("Current Load au démarrage :", this.currentLoad);
     }
 
-    // resature hashmap from cache.json
-    // Fusion de load() et onStart() pour tout initialiser correctement au démarrage
+    // restore hashmap from cache.json
+    // Merge de load() and onStart() to initialize everything  at start
     async onStart(): Promise<void> {
-        await this.dataStorage.ensureStore();
+        const parsedData = await this.dataStorage.load();
         
-        const file = await fs.readFile(this.dataStorage.DATA_FILE, "utf-8");
-        if (file.trim()) {
-            const parsedData = JSON.parse(file);
-            this.collection = parsedData;
+        if (parsedData) {
+            this.collection = parsedData as Bucket<K, V>[];
             this.currentLength = this.collection.length;
             console.log(`Données chargées depuis le cache, taille : ${this.currentLength}`);
         }
 
-        // On recalcule les limites et la charge basées sur le fichier qu'on vient de charger
+        // Recalculate limits and load based on the file just loaded
         this.computeLoadFactor();
         this.computeCurrentLoad();
     }
 
     async insert(newValue: HashmapValue<K, V | null>): Promise<void> {
-        // Check data folder and cache.json exists
-        await this.dataStorage.ensureStore();
-
+        // If key already exists → throw an error
+        const existing = this.findEntry(newValue.key);
+        if (existing) {
+            throw new Error(`Key "${String(newValue.key)}" already exists.`);        }
+    
         if (this.currentLoad + 1 > this.indexLimitFactor) {
             this.rehashing();
         }
-        
+    
         this.hashEntry(newValue, this.collection);
-        this.currentLoad++; 
-
-        // Edit the cache.json file après l'insertion (et le potentiel rehashing)
-        await fs.writeFile(
-            this.dataStorage.DATA_FILE,
-            JSON.stringify(this.collection, null, 2),
-            "utf-8"
-        );
+        this.currentLoad++;
+    
+        // Save cache.json after insert (and potential rehashing)
+        await this.persist();
 
         console.table(this.collection);
-        console.log("\n_________________________________________________________________________________________________________________________\n");
+        console.log("\n____________________________________________________________\n");
     }
 
     // Les méthodes internes de calcul restent synchrones car elles ne touchent qu'à la RAM
     hashEntry(newValue: HashmapValue<K, V | null>, targetArray: Bucket<K, V>[]): void {
 
-        // Get the key
-        const key = String(newValue.key);
-        // Hash the key
-        const hash = createHash('sha256').update(key);        
-        // Convert hash to hexadecimal
-        const hashHex = hash.digest("hex");
-        // Convert 8 first hex caracters to int
-        // total is 10 due to base int16, wich counter out of 16 and not of 10, which add 2 symbols with parsin at the end 
-        // slice à 10 a cause de parseInt() 
-        const hashToInt = parseInt(hashHex.slice(0, 8), 16); 
-        // Calculate index
-        const index = hashToInt % targetArray.length; // Modifié : utilise targetArray au lieu de this.collection
-        
-        this.pushOrCollide(index, newValue, targetArray);
+       const index = this.getIndex(newValue.key, targetArray.length);
+       this.pushOrCollide(index, newValue, targetArray);
     }
 
     pushOrCollide(index: number, newValue: HashmapValue<K, V | null>, targetArray: Bucket<K, V>[]): void {
@@ -144,6 +168,7 @@ export default class HashMap<K extends PropertyKey, V> {
         });
 
         this.collection = rehashedBucket; // Remplacement final
+        this.computeLoadFactor();
     }
     
     verifyLoadFactor(): void {}
@@ -167,44 +192,64 @@ export default class HashMap<K extends PropertyKey, V> {
         return keys;
     }
 
-    getKeyValue(key : K): V | null {
-        let value: V | null = null;
 
-       for (const bucket of this.collection) {
-            if (bucket === null) continue;
-
-            if (Array.isArray(bucket)) {
-                for (const entry of bucket) {
-                    if (key === entry.key ) {
-                        value = entry.value;
-                    }
-                } 
-            } else {
-                if (key === bucket.key ){
-                    value = bucket.value;
-                }
-            }
-       }
-        return value;
+    getKeyValue(key: K): V | null {
+        const entry = this.findEntry(key);
+        if (!entry) {
+            return null;
+        }
+        return entry.value;
     }
 
-    // updateKeyValue(key : K, value : V): void {
-    //     let newValue: V | null = null;
+    async updateKeyValue(key: K, newValue: V): Promise<boolean> {
+        const entry = this.findEntry(key);
+        if (!entry) {
+            return false;
+        }
+        entry.value = newValue;
+        await this.persist();
+        return true;
+    }
 
-    //    for (const bucket of this.collection) {
-    //         if (bucket === null) continue;
+    async deleteKey(key: K): Promise<boolean> {
+        const index = this.getIndex(key);
+        const bucket = this.collection[index];
 
-    //         if (Array.isArray(bucket)) {
-    //             for (const entry of bucket) {
-    //                 if (key === entry.key ) {
-    //                     newValue = entry.value;
-    //                 }
-    //             } 
-    //         } else {
-    //             if (key === bucket.key ){
-    //                 value = bucket.value;
-    //             }
-    //         }
-    //    }
-    // }
+        if (bucket === null) {
+            return false; // bucket null, stop here
+        }
+        if (Array.isArray(bucket)) {
+            let entryIndex = -1;  // because an array start at 0
+
+            for (let i = 0; i < bucket.length; i++) {
+                if (bucket[i].key === key) { // compare bucket's key with target key
+                    entryIndex = i; // its position in array 
+                    break;
+                }
+            }
+
+            if (entryIndex === -1) {
+                return false; // it doesn't exists
+            }
+
+            bucket.splice(entryIndex, 1); // delete from array
+
+            if (bucket.length === 0) {
+                this.collection[index] = null; // if bucket is empty -> null
+            } else if (bucket.length === 1) { // it has one element, back to a single entry
+                this.collection[index] = bucket[0];
+            }
+            this.currentLoad--; 
+            await this.persist();
+            return true;
+        }
+
+        if (bucket.key !== key) { // if bucket isn't an array 
+            return false; // and key aren't the same
+        }
+        this.collection[index] = null; // if they're the same -> bucket = null
+        this.currentLoad--;
+        await this.persist();
+        return true;
+    }
 }

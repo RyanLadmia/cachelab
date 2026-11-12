@@ -3,44 +3,81 @@ import HashMap from './src/services/hashmap.service'
 
 
 const fastify = Fastify({
-  logger: true
+  logger: true,
 })
 
-fastify.get('/cached-data', async function (request, reply) {
+async function main(){
+    const cache = new HashMap<string, string>()
+    await cache.onStart();
 
-})
-
-// Run the server
-fastify.listen({port: 3001, host: "0.0.0.0"}, function (err, address) {
-    if (err) {
-        fastify.log.error(err)
-        process.exit(1)
+    // Optional seeds
+    const seeds = [
+        { key: 'name', value: 'joris' },
+        { key: 'erlkjher', value: 'ryan' },
+        { key: 'hhhgjf', value: 'batman' },
+        { key: 'bnbnb', value: 'whesh' },
+        { key: 'zzzz', value: 'zidane' },
+        { key: 'oooo', value: 'verguledozone' },
+    ]
+    for (const seed of seeds) {
+        try {
+            await cache.insert(seed)
+        } catch (error) {
+            // key already exist -> skip this step
+            console.log(error instanceof Error ? error.message : error, "\n")
+        }
     }
-})
 
-// Declare a route
-fastify.get('/', async function (request, reply) {
-    let toto = new HashMap();
-    await toto.onStart();
-    await toto.insert({key: "name", value:"joris"});
-    await toto.insert({key: "erlkjher", value:"ryan"})
-    await toto.insert({key: "hhhgjf", value:"batman"})
-    await toto.insert({key: "bnbnb", value:"whesh"})
-    await toto.insert({key: "zzzz", value:"zidane"})
-    await toto.insert({key: "oooo", value:"verguledozone"})
-    return "plop"
-}) // curl http://127.0.0.1:3001 pour lancer les insertions
+    fastify.get('/', async function() {
+        return { status: 'OK\n'}
+    })
 
-fastify.get('/keys', async function (request, reply){
-    let map = new HashMap();
-    await map.onStart();
-    return map.getAllKeys();
-})
+    fastify.get('/keys', async function() {
+        return cache.getAllKeys()
+    })
 
-fastify.get<{ Params: { key: string } }>('/keys/:key', async function (request, reply) {
-    let myValue = new HashMap();
+    fastify.get<{Params: {key: string } }>('/keys/:key', async function (request, reply) {
+        const value = cache.getKeyValue(request.params.key)
 
-    await myValue.onStart();
+        if (value == null) {
+            return reply.code(404).send({ error: `Key "${request.params.key}" not found.`})
+        }
+        return { key: request.params.key, value}
+    })
 
-    return myValue.getKeyValue(request.params.key);
+    fastify.post<{ Body: {key: string, value: string } }>('/keys', async function (request, reply) {
+        const { key, value } = request.body
+
+        if (!key) {
+            return reply.code(400).send({ error: 'key is required' })
+        }
+        try {
+            await cache.insert({ key, value })
+            return reply.code(201).send({ key, value })
+        }catch (error) {
+            return reply.code(409).send({ error: error instanceof Error ? error.message: 'Insertion failed'})
+        }
+    })
+
+    fastify.put<{ Params: {key: string }, Body: {value: string} }>('/keys/:key', async function (request, reply) {
+        const updated = await cache.updateKeyValue(request.params.key, request.body.value)
+        if (!updated) {
+            return reply.code(404).send({error: `Key "${request.params.key}" not found `})
+        }
+        return { key: request.params.key, value: request.body.value}
+    })
+
+    fastify.delete<{ Params: { key: string }}>('/keys/:key', async function (request, reply) {
+        const deleted = await cache.deleteKey(request.params.key)
+        if (!deleted) {
+            return reply.code(404).send({error: `Key "${request.params.key}" not found`})
+        }
+        return {deleted : true, key: request.params.key}
+    })
+    await fastify.listen ({port: 3001, host: '0.0.0.0'})
+}
+
+main().catch((err) => {
+    console.error(err,  "\n")
+    process.exit(1)
 })
