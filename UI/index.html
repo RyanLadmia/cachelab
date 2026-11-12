@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CacheLab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Manrope:wght@400;600;700&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./assets/css/main.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand" aria-label="CacheLab">
+          <span class="brand__name">CacheLab</span>
+          <span class="brand__tag">hashmap</span>
+        </div>
+        <nav class="nav" aria-label="Actions">
+          <button class="nav__link is-active" type="button" data-open-modal="create">
+            Créer
+          </button>
+          <button class="nav__link" type="button" data-open-modal="lookup">
+            Consulter
+          </button>
+          <button id="refresh-btn" class="nav__link" type="button">
+            Actualiser
+          </button>
+        </nav>
+      </header>
+
+      <section class="page-hero">
+        <h1 class="page-hero__title">CacheLab</h1>
+        <p class="page-hero__lead">
+          Visualisez, créez et modifiez votre hashmap sans quitter la page.
+        </p>
+      </section>
+
+      <div class="status-row">
+        <div id="health-badge" class="badge">
+          <span class="badge__dot"></span>
+          Vérification API…
+        </div>
+        <button class="btn btn--accent btn--sm" type="button" data-open-modal="create">
+          Nouvelle entrée
+        </button>
+      </div>
+
+      <div class="metrics" aria-label="Statistiques du cache">
+        <div class="metric">
+          <span class="metric__label">Taille</span>
+          <span id="stat-length" class="metric__value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric__label">Charge</span>
+          <span id="stat-load" class="metric__value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric__label">Occupés</span>
+          <span id="stat-occupied" class="metric__value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric__label">Collisions</span>
+          <span id="stat-collisions" class="metric__value">—</span>
+        </div>
+      </div>
+
+      <section class="panel" aria-labelledby="buckets-title">
+        <div class="panel__header">
+          <h2 id="buckets-title" class="panel__title">Vue des buckets</h2>
+          <span id="buckets-meta" class="panel__meta">—</span>
+        </div>
+
+        <div class="legend" aria-hidden="true">
+          <span class="legend__item">
+            <span class="legend__swatch legend__swatch--empty"></span>
+            Vide
+          </span>
+          <span class="legend__item">
+            <span class="legend__swatch legend__swatch--single"></span>
+            Occupé
+          </span>
+          <span class="legend__item">
+            <span class="legend__swatch legend__swatch--collision"></span>
+            Collision
+          </span>
+        </div>
+
+        <div id="buckets-grid" class="buckets-grid" aria-live="polite">
+          <p class="empty-state">Chargement des buckets…</p>
+        </div>
+
+        <div class="load-bar">
+          <div class="load-bar__track" aria-hidden="true">
+            <div id="load-fill" class="load-bar__fill"></div>
+          </div>
+          <div class="load-bar__meta">
+            <span>Facteur de charge</span>
+            <span id="load-ratio">—</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Create modal -->
+    <div id="modal-create" class="modal" role="dialog" aria-modal="true" aria-labelledby="create-title" hidden>
+      <div class="modal__backdrop" data-close-modal></div>
+      <div class="modal__dialog">
+        <div class="modal__header">
+          <div>
+            <h2 id="create-title" class="modal__title">Nouvelle entrée</h2>
+            <p class="modal__subtitle">Ajoute une paire clé / valeur au cache.</p>
+          </div>
+          <button class="modal__close" type="button" data-close-modal aria-label="Fermer">×</button>
+        </div>
+        <form id="create-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="create-key">Clé</label>
+            <input id="create-key" class="field__control field__control--mono" name="key" type="text" required autocomplete="off" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="create-value">Valeur</label>
+            <textarea id="create-value" class="field__control field__control--mono" name="value"></textarea>
+          </div>
+          <div class="form-actions">
+            <button id="create-submit" class="btn btn--accent" type="submit">Créer</button>
+            <button class="btn btn--ghost" type="button" data-close-modal>Annuler</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Edit modal -->
+    <div id="modal-edit" class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-title" hidden>
+      <div class="modal__backdrop" data-close-modal></div>
+      <div class="modal__dialog">
+        <div class="modal__header">
+          <div>
+            <h2 id="edit-title" class="modal__title">Modifier</h2>
+            <p class="modal__subtitle">Mets à jour la valeur d’une clé existante.</p>
+          </div>
+          <button class="modal__close" type="button" data-close-modal aria-label="Fermer">×</button>
+        </div>
+        <form id="edit-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="edit-key">Clé</label>
+            <input id="edit-key" class="field__control field__control--mono" name="key" type="text" readonly />
+          </div>
+          <div class="field">
+            <label class="field__label" for="edit-value">Valeur</label>
+            <textarea id="edit-value" class="field__control field__control--mono" name="value"></textarea>
+          </div>
+          <div class="form-actions">
+            <button id="edit-submit" class="btn btn--accent" type="submit">Enregistrer</button>
+            <button class="btn btn--ghost" type="button" data-close-modal>Annuler</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Lookup modal -->
+    <div id="modal-lookup" class="modal" role="dialog" aria-modal="true" aria-labelledby="lookup-title" hidden>
+      <div class="modal__backdrop" data-close-modal></div>
+      <div class="modal__dialog">
+        <div class="modal__header">
+          <div>
+            <h2 id="lookup-title" class="modal__title">Consulter</h2>
+            <p class="modal__subtitle">Recherche une clé dans le cache.</p>
+          </div>
+          <button class="modal__close" type="button" data-close-modal aria-label="Fermer">×</button>
+        </div>
+        <form id="lookup-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="lookup-key">Clé</label>
+            <input id="lookup-key" class="field__control field__control--mono" name="key" type="text" required autocomplete="off" />
+          </div>
+          <div class="form-actions">
+            <button id="lookup-submit" class="btn btn--accent" type="submit">Rechercher</button>
+          </div>
+        </form>
+        <div id="lookup-result" class="result-block" hidden style="margin-top: 1rem"></div>
+      </div>
+    </div>
+
+    <script type="module" src="./assets/js/pages/home.js"></script>
+  </body>
+</html>

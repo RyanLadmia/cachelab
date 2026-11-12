@@ -1,4 +1,6 @@
 import Fastify from 'fastify'
+import fastifyStatic from '@fastify/static'
+import path from 'node:path'
 import HashMap from './src/services/hashmap.service'
 import { MyHashMapController } from './src/controllers/hashmap-controllers'
 
@@ -31,15 +33,26 @@ async function main(){
 
     const hashMapController = MyHashMapController(cache)
 
-    fastify.get('/', async function() {
-        return { status: 'OK\n'}
+    fastify.get('/', async function(_request, reply) {
+        return reply.redirect('/ui/')
     })
 
+    fastify.get('/health', async function() {
+        return { status: 'OK' }
+    })
+
+    fastify.get('/buckets', hashMapController.getBuckets)
     fastify.get('/keys', hashMapController.getAll)
     fastify.get('/keys/:key', hashMapController.getOne)
     fastify.post('/keys', hashMapController.create)
     fastify.put('/keys/:key', hashMapController.update)
     fastify.delete('/keys/:key', hashMapController.remove)
+
+    await fastify.register(fastifyStatic, {
+        root: path.join(process.cwd(), 'UI'),
+        prefix: '/ui/',
+        index: ['index.html'],
+    })
 
     await fastify.listen ({port: 3001, host: '0.0.0.0'})
 }
