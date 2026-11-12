@@ -1,5 +1,4 @@
 import { createHash } from "crypto";
-import { promises as fs } from "fs";
 import DataStorage from "./data-storage.service";
 
 type HashmapValue<K extends PropertyKey, V> = {

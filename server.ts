@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import HashMap from './src/services/hashmap.service'
+import { MyHashMapController } from './src/controllers/hashmap-controllers'
 
 
 const fastify = Fastify({
@@ -28,52 +29,18 @@ async function main(){
         }
     }
 
+    const hashMapController = MyHashMapController(cache)
+
     fastify.get('/', async function() {
         return { status: 'OK\n'}
     })
 
-    fastify.get('/keys', async function() {
-        return cache.getAllKeys()
-    })
+    fastify.get('/keys', hashMapController.getAll)
+    fastify.get('/keys/:key', hashMapController.getOne)
+    fastify.post('/keys', hashMapController.create)
+    fastify.put('/keys/:key', hashMapController.update)
+    fastify.delete('/keys/:key', hashMapController.remove)
 
-    fastify.get<{Params: {key: string } }>('/keys/:key', async function (request, reply) {
-        const value = cache.getKeyValue(request.params.key)
-
-        if (value == null) {
-            return reply.code(404).send({ error: `Key "${request.params.key}" not found.`})
-        }
-        return { key: request.params.key, value}
-    })
-
-    fastify.post<{ Body: {key: string, value: string } }>('/keys', async function (request, reply) {
-        const { key, value } = request.body
-
-        if (!key) {
-            return reply.code(400).send({ error: 'key is required' })
-        }
-        try {
-            await cache.insert({ key, value })
-            return reply.code(201).send({ key, value })
-        }catch (error) {
-            return reply.code(409).send({ error: error instanceof Error ? error.message: 'Insertion failed'})
-        }
-    })
-
-    fastify.put<{ Params: {key: string }, Body: {value: string} }>('/keys/:key', async function (request, reply) {
-        const updated = await cache.updateKeyValue(request.params.key, request.body.value)
-        if (!updated) {
-            return reply.code(404).send({error: `Key "${request.params.key}" not found `})
-        }
-        return { key: request.params.key, value: request.body.value}
-    })
-
-    fastify.delete<{ Params: { key: string }}>('/keys/:key', async function (request, reply) {
-        const deleted = await cache.deleteKey(request.params.key)
-        if (!deleted) {
-            return reply.code(404).send({error: `Key "${request.params.key}" not found`})
-        }
-        return {deleted : true, key: request.params.key}
-    })
     await fastify.listen ({port: 3001, host: '0.0.0.0'})
 }
 
@@ -81,3 +48,15 @@ main().catch((err) => {
     console.error(err,  "\n")
     process.exit(1)
 })
+
+/**
+ * Curl for update and delete
+ * 
+ * Update :
+ *      curl -X PUT http://127.0.0.1:3001/keys/name \
+        -H "Content-Type: application/json" \
+        -d '{"value":"new_value"}'
+
+    Delete :
+        curl -X DELETE http://127.0.0.1:3001/keys/name
+ */

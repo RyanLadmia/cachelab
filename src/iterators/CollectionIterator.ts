@@ -1,4 +1,4 @@
-import { MyCollection, Slot } from "../model/CollectionType";
+import { MyCollection, Slot } from "../models/CollectionType";
 
 export default class CollectionIterator<T>{
 
