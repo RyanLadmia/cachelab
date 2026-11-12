@@ -2,16 +2,13 @@ import { createHash } from "crypto";
 import { promises as fs } from "fs";
 import DataStorage from "./data-storage.service";
 
-type HashmapValue<K extends PropertyKey, V> = {
+type HashmapValue<K extends PropertyKey, V> = { // a refacto ailleurs
     key: K;
     value: V;
 }
 
 type Bucket<K extends PropertyKey, V> = HashmapValue<K, V | null> | HashmapValue<K, V | null>[] | null;
 
-
-
-//define class 
 export default class HashMap<K extends PropertyKey, V> {
     
     private BASE_LENGTH = 8;
@@ -28,6 +25,10 @@ export default class HashMap<K extends PropertyKey, V> {
 
     computeLoadFactor(): void {
         this.indexLimitFactor = this.currentLength * this.loadFactor;
+    }
+
+    setStorageFile(filePath: string): void {
+        this.dataStorage.selectDataFile(filePath);
     }
 
     computeCurrentLoad(): void {
@@ -47,8 +48,7 @@ export default class HashMap<K extends PropertyKey, V> {
         console.log("Current Load au démarrage :", this.currentLoad);
     }
 
-    // resature hashmap from cache.json
-    // Fusion de load() et onStart() pour tout initialiser correctement au démarrage
+    // resature hashmap from cache.json // ou d'autre a voir
     async onStart(): Promise<void> {
         await this.dataStorage.ensureStore();
         
@@ -65,29 +65,45 @@ export default class HashMap<K extends PropertyKey, V> {
         this.computeCurrentLoad();
     }
 
+// Nouvelles variables à ajouter en haut de votre classe HashMap
+    private unsavedInsertions: number = 0;
+    private readonly BATCH_SAVE_LIMIT: number = 500; // Sauvegarde tous les 500 éléments
+
     async insert(newValue: HashmapValue<K, V | null>): Promise<void> {
-        // Check data folder and cache.json exists
-        await this.dataStorage.ensureStore();
+
+        // SUPPRIMÉ : await this.dataStorage.ensureStore(); (c'est déjà fait dans onStart !)
 
         if (this.currentLoad + 1 > this.indexLimitFactor) {
             this.rehashing();
         }
         
         this.hashEntry(newValue, this.collection);
-        this.currentLoad++; 
+        this.currentLoad++;
+        this.unsavedInsertions++;
 
-        // Edit the cache.json file après l'insertion (et le potentiel rehashing)
-        await fs.writeFile(
-            this.dataStorage.DATA_FILE,
-            JSON.stringify(this.collection, null, 2),
-            "utf-8"
-        );
+        // SUPPRIMÉ : console.table(this.collection); (C'est ce qui faisait figer votre terminal)
 
-        console.table(this.collection);
-        console.log("\n_________________________________________________________________________________________________________________________\n");
+        // On n'écrit sur le disque que si on atteint la limite
+        if (this.unsavedInsertions >= this.BATCH_SAVE_LIMIT) {
+            await this.saveToDisk();
+        }
     }
 
-    // Les méthodes internes de calcul restent synchrones car elles ne touchent qu'à la RAM
+    // Nouvelle méthode dédiée à la sauvegarde
+    async saveToDisk(): Promise<void> {
+        if (this.unsavedInsertions === 0) return;
+
+        await this.dataStorage.ensureStore(); // Vérification de sécurité
+        await fs.writeFile(
+            this.dataStorage.DATA_FILE,
+            JSON.stringify(this.collection),
+            "utf-8"
+        );
+        
+        console.log(`[Batch] Sauvegarde effectuée : ${this.unsavedInsertions} éléments enregistrés sur le disque.`);
+        this.unsavedInsertions = 0; // Remise à zéro
+    }
+
     hashEntry(newValue: HashmapValue<K, V | null>, targetArray: Bucket<K, V>[]): void {
 
         // Get the key
@@ -101,7 +117,7 @@ export default class HashMap<K extends PropertyKey, V> {
         // slice à 10 a cause de parseInt() 
         const hashToInt = parseInt(hashHex.slice(0, 8), 16); 
         // Calculate index
-        const index = hashToInt % targetArray.length; // Modifié : utilise targetArray au lieu de this.collection
+        const index = hashToInt % targetArray.length; 
         
         this.pushOrCollide(index, newValue, targetArray);
     }
@@ -143,6 +159,8 @@ export default class HashMap<K extends PropertyKey, V> {
         });
 
         this.collection = rehashedBucket; // Remplacement final
+
+        this.computeLoadFactor();
     }
     
     verifyLoadFactor(): void {}
