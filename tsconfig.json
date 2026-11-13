@@ -66,5 +66,5 @@
   "include": ["./"],
 
   // What to ignore
-  "exclude": ["node_modules", "dist", "tests"]
+  "exclude": ["node_modules", "dist", "tests", "src/UI"]
 }
