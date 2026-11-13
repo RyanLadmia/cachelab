@@ -26,6 +26,12 @@
           <button class="nav__link" type="button" data-open-modal="lookup">
             Consulter
           </button>
+          <button class="nav__link" type="button" data-open-modal="seed">
+            Seed
+          </button>
+          <button id="live-btn" class="nav__link" type="button">
+            Mémoire
+          </button>
           <button id="refresh-btn" class="nav__link" type="button">
             Actualiser
           </button>
@@ -35,7 +41,7 @@
       <section class="page-hero">
         <h1 class="page-hero__title">CacheLab</h1>
         <p class="page-hero__lead">
-          Visualisez, créez et modifiez votre hashmap sans quitter la page.
+          Fichiers JSON, seed, buckets et CRUD — branchés uniquement sur l’API existante.
         </p>
       </section>
 
@@ -44,6 +50,7 @@
           <span class="badge__dot"></span>
           Vérification API…
         </div>
+        <div id="view-badge" class="badge active-file">vue : mémoire</div>
         <button class="btn btn--accent btn--sm" type="button" data-open-modal="create">
           Nouvelle entrée
         </button>
@@ -68,41 +75,86 @@
         </div>
       </div>
 
-      <section class="panel" aria-labelledby="buckets-title">
-        <div class="panel__header">
-          <h2 id="buckets-title" class="panel__title">Vue des buckets</h2>
-          <span id="buckets-meta" class="panel__meta">—</span>
-        </div>
-
-        <div class="legend" aria-hidden="true">
-          <span class="legend__item">
-            <span class="legend__swatch legend__swatch--empty"></span>
-            Vide
-          </span>
-          <span class="legend__item">
-            <span class="legend__swatch legend__swatch--single"></span>
-            Occupé
-          </span>
-          <span class="legend__item">
-            <span class="legend__swatch legend__swatch--collision"></span>
-            Collision
-          </span>
-        </div>
-
-        <div id="buckets-grid" class="buckets-grid" aria-live="polite">
-          <p class="empty-state">Chargement des buckets…</p>
-        </div>
-
-        <div class="load-bar">
-          <div class="load-bar__track" aria-hidden="true">
-            <div id="load-fill" class="load-bar__fill"></div>
+      <div class="workspace">
+        <aside class="panel files-panel" aria-labelledby="files-title">
+          <div class="panel__header">
+            <h2 id="files-title" class="panel__title">Fichiers JSON</h2>
+            <span id="files-count" class="panel__meta">—</span>
           </div>
-          <div class="load-bar__meta">
-            <span>Facteur de charge</span>
-            <span id="load-ratio">—</span>
+
+          <div id="files-list" class="files-list">
+            <p class="empty-state">Chargement…</p>
           </div>
-        </div>
-      </section>
+
+          <form id="create-file-form" novalidate>
+            <div class="field" style="margin-bottom: 0.75rem">
+              <label class="field__label" for="new-filename">Nouveau fichier</label>
+              <input
+                id="new-filename"
+                class="field__control field__control--mono"
+                name="filename"
+                type="text"
+                placeholder="ex. demo.json"
+                autocomplete="off"
+                required
+              />
+            </div>
+            <div class="form-actions">
+              <button id="create-file-submit" class="btn btn--accent btn--sm" type="submit">
+                Créer le fichier
+              </button>
+            </div>
+          </form>
+
+          <div class="seed-box">
+            <div class="seed-box__title">Seed</div>
+            <p class="field__hint">Utilise `/data-seeder` puis `/seed`.</p>
+            <button class="btn btn--ghost btn--sm" type="button" data-open-modal="seed">
+              Ouvrir le panneau seed
+            </button>
+          </div>
+        </aside>
+
+        <section class="panel" aria-labelledby="buckets-title">
+          <div class="panel__header">
+            <h2 id="buckets-title" class="panel__title">Vue des buckets</h2>
+            <span id="buckets-meta" class="panel__meta">—</span>
+          </div>
+
+          <p id="mode-hint" class="mode-hint">
+            Mode mémoire serveur (`/buckets` + `/keys`).
+          </p>
+
+          <div class="legend" aria-hidden="true">
+            <span class="legend__item">
+              <span class="legend__swatch legend__swatch--empty"></span>
+              Vide
+            </span>
+            <span class="legend__item">
+              <span class="legend__swatch legend__swatch--single"></span>
+              Occupé
+            </span>
+            <span class="legend__item">
+              <span class="legend__swatch legend__swatch--collision"></span>
+              Collision
+            </span>
+          </div>
+
+          <div id="buckets-grid" class="buckets-grid" aria-live="polite">
+            <p class="empty-state">Chargement des buckets…</p>
+          </div>
+
+          <div class="load-bar">
+            <div class="load-bar__track" aria-hidden="true">
+              <div id="load-fill" class="load-bar__fill"></div>
+            </div>
+            <div class="load-bar__meta">
+              <span>Facteur de charge</span>
+              <span id="load-ratio">—</span>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
 
     <div id="modal-create" class="modal" role="dialog" aria-modal="true" aria-labelledby="create-title" hidden>
@@ -111,7 +163,7 @@
         <div class="modal__header">
           <div>
             <h2 id="create-title" class="modal__title">Nouvelle entrée</h2>
-            <p class="modal__subtitle">Ajoute une paire clé / valeur au cache.</p>
+            <p id="create-subtitle" class="modal__subtitle">Ajoute une paire clé / valeur.</p>
           </div>
           <button class="modal__close" type="button" data-close-modal aria-label="Fermer">×</button>
         </div>
@@ -138,7 +190,7 @@
         <div class="modal__header">
           <div>
             <h2 id="edit-title" class="modal__title">Modifier</h2>
-            <p class="modal__subtitle">Mets à jour la valeur d’une clé existante.</p>
+            <p class="modal__subtitle">Disponible en mode mémoire (`PUT /keys/:key`).</p>
           </div>
           <button class="modal__close" type="button" data-close-modal aria-label="Fermer">×</button>
         </div>
@@ -165,7 +217,7 @@
         <div class="modal__header">
           <div>
             <h2 id="lookup-title" class="modal__title">Consulter</h2>
-            <p class="modal__subtitle">Recherche une clé dans le cache.</p>
+            <p class="modal__subtitle">Recherche via `GET /keys/:key` (mémoire serveur).</p>
           </div>
           <button class="modal__close" type="button" data-close-modal aria-label="Fermer">×</button>
         </div>
@@ -179,6 +231,52 @@
           </div>
         </form>
         <div id="lookup-result" class="result-block" hidden style="margin-top: 1rem"></div>
+      </div>
+    </div>
+
+    <div id="modal-seed" class="modal" role="dialog" aria-modal="true" aria-labelledby="seed-title" hidden>
+      <div class="modal__backdrop" data-close-modal></div>
+      <div class="modal__dialog">
+        <div class="modal__header">
+          <div>
+            <h2 id="seed-title" class="modal__title">Seed</h2>
+            <p class="modal__subtitle">Génère `init.json` puis lance l’insertion batch.</p>
+          </div>
+          <button class="modal__close" type="button" data-close-modal aria-label="Fermer">×</button>
+        </div>
+        <form id="seed-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="seed-count">Nombre d’insertions</label>
+            <input
+              id="seed-count"
+              class="field__control field__control--mono"
+              name="count"
+              type="number"
+              min="1"
+              step="1"
+              value="64"
+              required
+            />
+          </div>
+          <div class="form-actions">
+            <button id="seed-generate" class="btn btn--ghost" type="submit">Générer le seed</button>
+            <button id="seed-run" class="btn btn--accent" type="button">Lancer `/seed`</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="modal-preview" class="modal" role="dialog" aria-modal="true" aria-labelledby="preview-title" hidden>
+      <div class="modal__backdrop" data-close-modal></div>
+      <div class="modal__dialog modal__dialog--wide">
+        <div class="modal__header">
+          <div>
+            <h2 id="preview-title" class="modal__title">Aperçu JSON</h2>
+            <p id="preview-subtitle" class="modal__subtitle">—</p>
+          </div>
+          <button class="modal__close" type="button" data-close-modal aria-label="Fermer">×</button>
+        </div>
+        <pre id="preview-content" class="json-preview">{}</pre>
       </div>
     </div>
 

@@ -1,10 +1,22 @@
 import { api } from "../api.js";
+import { snapshotFromCollection } from "../buckets-from-file.js";
 import { escapeHtml, showToast } from "../common.js";
+
+const FILES_STORAGE_KEY = "cachelab.knownFiles";
+const DEFAULT_FILES = ["cache.json", "toto.json"];
 
 const bucketsGrid = document.getElementById("buckets-grid");
 const bucketsMeta = document.getElementById("buckets-meta");
 const healthBadge = document.getElementById("health-badge");
+const viewBadge = document.getElementById("view-badge");
+const modeHint = document.getElementById("mode-hint");
 const refreshBtn = document.getElementById("refresh-btn");
+const liveBtn = document.getElementById("live-btn");
+const filesList = document.getElementById("files-list");
+const filesCount = document.getElementById("files-count");
+const createFileForm = document.getElementById("create-file-form");
+const createFileSubmit = document.getElementById("create-file-submit");
+const newFilename = document.getElementById("new-filename");
 const statLength = document.getElementById("stat-length");
 const statLoad = document.getElementById("stat-load");
 const statOccupied = document.getElementById("stat-occupied");
@@ -15,9 +27,13 @@ const loadRatio = document.getElementById("load-ratio");
 const modalCreate = document.getElementById("modal-create");
 const modalEdit = document.getElementById("modal-edit");
 const modalLookup = document.getElementById("modal-lookup");
+const modalSeed = document.getElementById("modal-seed");
+const modalPreview = document.getElementById("modal-preview");
 const createForm = document.getElementById("create-form");
+const createSubtitle = document.getElementById("create-subtitle");
 const editForm = document.getElementById("edit-form");
 const lookupForm = document.getElementById("lookup-form");
+const seedForm = document.getElementById("seed-form");
 const createKey = document.getElementById("create-key");
 const createValue = document.getElementById("create-value");
 const createSubmit = document.getElementById("create-submit");
@@ -27,10 +43,37 @@ const editSubmit = document.getElementById("edit-submit");
 const lookupKey = document.getElementById("lookup-key");
 const lookupSubmit = document.getElementById("lookup-submit");
 const lookupResult = document.getElementById("lookup-result");
+const seedCount = document.getElementById("seed-count");
+const seedGenerate = document.getElementById("seed-generate");
+const seedRun = document.getElementById("seed-run");
+const previewSubtitle = document.getElementById("preview-subtitle");
+const previewContent = document.getElementById("preview-content");
 
 let previousSnapshot = null;
 let scrollLockY = 0;
 let activeModal = null;
+/** @type {'live' | 'file'} */
+let viewMode = "live";
+let selectedFile = null;
+
+function getKnownFiles() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FILES_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((name) => typeof name === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberFile(name) {
+  const next = new Set([...DEFAULT_FILES, ...getKnownFiles(), name].filter(Boolean));
+  localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify([...next]));
+}
+
+function forgetFile(name) {
+  const next = getKnownFiles().filter((item) => item !== name);
+  localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify(next));
+}
 
 function stateLabel(type) {
   if (type === "collision") return "Collision";
@@ -47,9 +90,7 @@ function bucketSignature(bucket) {
 
 function keepScroll(run) {
   const y = window.scrollY;
-  const restore = () => {
-    window.scrollTo(0, y);
-  };
+  const restore = () => window.scrollTo(0, y);
   const result = run();
 
   if (result && typeof result.then === "function") {
@@ -77,9 +118,7 @@ function openModal(modal, focusEl) {
   document.body.style.position = "fixed";
   document.body.style.width = "100%";
 
-  requestAnimationFrame(() => {
-    focusEl?.focus();
-  });
+  requestAnimationFrame(() => focusEl?.focus());
 }
 
 function closeModal(modal = activeModal) {
@@ -98,20 +137,37 @@ function closeModal(modal = activeModal) {
   }
 }
 
+function updateViewChrome() {
+  if (viewMode === "file" && selectedFile) {
+    viewBadge.textContent = `vue : ${selectedFile}`;
+    modeHint.textContent = `Mode fichier « ${selectedFile} » — lecture via GET /api/files/:name, création via POST /api/insert. Édition/suppression de clés : mode Mémoire uniquement.`;
+    createSubtitle.textContent = `Insertion dans « ${selectedFile} » via POST /api/insert.`;
+  } else {
+    viewBadge.textContent = "vue : mémoire";
+    modeHint.textContent =
+      "Mode mémoire serveur — visualisation `/buckets`, CRUD `/keys`.";
+    createSubtitle.textContent = "Ajoute une paire clé / valeur via POST /keys.";
+  }
+}
+
 function renderEntry(entry) {
   const safeKey = escapeHtml(entry.key);
   const safeValue = escapeHtml(entry.value ?? "");
   const encoded = encodeURIComponent(entry.key);
+  const liveActions =
+    viewMode === "live"
+      ? `
+        <button class="btn btn--ghost btn--sm" type="button" data-view="${encoded}">Voir</button>
+        <button class="btn btn--ghost btn--sm" type="button" data-edit="${encoded}">Éditer</button>
+        <button class="btn btn--danger btn--sm" type="button" data-delete="${encoded}">Suppr.</button>
+      `
+      : `<span class="field__hint">Lecture fichier</span>`;
 
   return `
     <article class="entry-card">
       <div class="entry-card__key">${safeKey}</div>
       <div class="entry-card__value">${safeValue}</div>
-      <div class="entry-card__actions">
-        <button class="btn btn--ghost btn--sm" type="button" data-view="${encoded}">Voir</button>
-        <button class="btn btn--ghost btn--sm" type="button" data-edit="${encoded}">Éditer</button>
-        <button class="btn btn--danger btn--sm" type="button" data-delete="${encoded}">Suppr.</button>
-      </div>
+      <div class="entry-card__actions">${liveActions}</div>
     </article>
   `;
 }
@@ -135,7 +191,6 @@ function renderBucket(bucket, animClass, delayIndex) {
   return `
     <article
       class="bucket bucket--${bucket.type} ${animClass}"
-      data-bucket-index="${bucket.index}"
       style="animation-delay: ${Math.min(delayIndex, 16) * 28}ms"
       aria-label="Bucket ${bucket.index}, ${stateLabel(bucket.type)}"
     >
@@ -153,16 +208,60 @@ function renderBucket(bucket, animClass, delayIndex) {
 function updateStats(snapshot) {
   const ratio = snapshot.loadLimit > 0 ? snapshot.load / snapshot.loadLimit : 0;
   const percent = Math.min(100, Math.round(ratio * 100));
+  const label =
+    viewMode === "file" && selectedFile
+      ? `${snapshot.length} buckets · ${selectedFile}`
+      : `${snapshot.length} buckets · mémoire`;
 
   statLength.textContent = String(snapshot.length);
   statLoad.textContent = String(snapshot.load);
   statOccupied.textContent = String(snapshot.occupied);
   statCollisions.textContent = String(snapshot.collisions);
-  bucketsMeta.textContent = `${snapshot.length} buckets`;
+  bucketsMeta.textContent = label;
 
   loadFill.style.width = `${percent}%`;
   loadFill.classList.toggle("is-hot", percent >= 85);
   loadRatio.textContent = `${snapshot.load} / ${snapshot.loadLimit} (${percent}%)`;
+}
+
+function paintSnapshot(snapshot, { resetAnim = false } = {}) {
+  if (resetAnim) previousSnapshot = null;
+  updateStats(snapshot);
+  updateViewChrome();
+
+  if (!Array.isArray(snapshot.buckets) || snapshot.buckets.length === 0) {
+    bucketsGrid.innerHTML = `<p class="empty-state">Aucun bucket disponible.</p>`;
+    previousSnapshot = snapshot;
+    return;
+  }
+
+  const prevMap = new Map(
+    (previousSnapshot?.buckets || []).map((bucket) => [
+      bucket.index,
+      bucketSignature(bucket),
+    ])
+  );
+  const sizeChanged =
+    previousSnapshot && previousSnapshot.length !== snapshot.length;
+  const isFirst = !previousSnapshot;
+
+  bucketsGrid.innerHTML = snapshot.buckets
+    .map((bucket, index) => {
+      const signature = bucketSignature(bucket);
+      const previous = prevMap.get(bucket.index);
+      let animClass = "";
+
+      if (isFirst) animClass = "is-enter";
+      else if (sizeChanged) animClass = "is-rehash";
+      else if (previous !== signature) {
+        animClass = bucket.type === "empty" ? "is-enter" : "is-changed";
+      }
+
+      return renderBucket(bucket, animClass, index);
+    })
+    .join("");
+
+  previousSnapshot = snapshot;
 }
 
 async function checkHealth() {
@@ -177,47 +276,11 @@ async function checkHealth() {
   }
 }
 
-async function loadBuckets({ quiet = false } = {}) {
+async function loadLiveBuckets({ quiet = false, resetAnim = false } = {}) {
   return keepScroll(async () => {
     try {
       const snapshot = await api.getBuckets();
-      updateStats(snapshot);
-
-      if (!Array.isArray(snapshot.buckets) || snapshot.buckets.length === 0) {
-        bucketsGrid.innerHTML = `<p class="empty-state">Aucun bucket disponible.</p>`;
-        previousSnapshot = snapshot;
-        return;
-      }
-
-      const prevMap = new Map(
-        (previousSnapshot?.buckets || []).map((bucket) => [
-          bucket.index,
-          bucketSignature(bucket),
-        ])
-      );
-      const sizeChanged =
-        previousSnapshot && previousSnapshot.length !== snapshot.length;
-      const isFirst = !previousSnapshot;
-
-      bucketsGrid.innerHTML = snapshot.buckets
-        .map((bucket, index) => {
-          const signature = bucketSignature(bucket);
-          const previous = prevMap.get(bucket.index);
-          let animClass = "";
-
-          if (isFirst) {
-            animClass = "is-enter";
-          } else if (sizeChanged) {
-            animClass = "is-rehash";
-          } else if (previous !== signature) {
-            animClass = bucket.type === "empty" ? "is-enter" : "is-changed";
-          }
-
-          return renderBucket(bucket, animClass, index);
-        })
-        .join("");
-
-      previousSnapshot = snapshot;
+      paintSnapshot(snapshot, { resetAnim });
     } catch (error) {
       if (!quiet) {
         bucketsGrid.innerHTML = `<p class="empty-state">Impossible de charger les buckets.</p>`;
@@ -227,8 +290,137 @@ async function loadBuckets({ quiet = false } = {}) {
   });
 }
 
+async function loadFileBuckets(filename, { quiet = false, resetAnim = true } = {}) {
+  return keepScroll(async () => {
+    try {
+      const collection = await api.getFile(filename);
+      const snapshot = snapshotFromCollection(collection);
+      viewMode = "file";
+      selectedFile = filename;
+      paintSnapshot(snapshot, { resetAnim });
+      await loadFiles();
+    } catch (error) {
+      if (!quiet) {
+        showToast(error.message, "error");
+      }
+    }
+  });
+}
+
+async function discoverFiles() {
+  let fromApi = [];
+
+  try {
+    const data = await api.listFiles();
+    if (Array.isArray(data)) {
+      fromApi = data.filter(
+        (name) => typeof name === "string" && name.endsWith(".json")
+      );
+    }
+  } catch {
+    // listStore backend peut renvoyer vide : on continue avec le probe
+  }
+
+  const candidates = [
+    ...new Set([...fromApi, ...DEFAULT_FILES, ...getKnownFiles()]),
+  ].filter((name) => typeof name === "string" && name.endsWith(".json"));
+
+  const existing = [];
+  await Promise.all(
+    candidates.map(async (name) => {
+      try {
+        await api.getFile(name);
+        existing.push(name);
+        rememberFile(name);
+      } catch {
+        forgetFile(name);
+      }
+    })
+  );
+
+  return existing.sort((a, b) => a.localeCompare(b));
+}
+
+function renderFiles(files) {
+  filesCount.textContent = `${files.length} fichier${files.length > 1 ? "s" : ""}`;
+
+  if (!files.length) {
+    filesList.innerHTML = `<p class="empty-state">Aucun fichier JSON détecté.</p>`;
+    return;
+  }
+
+  filesList.innerHTML = files
+    .map((name) => {
+      const safe = escapeHtml(name);
+      const encoded = encodeURIComponent(name);
+      const isActive = viewMode === "file" && selectedFile === name;
+      return `
+        <div class="file-item ${isActive ? "is-active" : ""}">
+          <button class="file-item__main" type="button" data-select-file="${encoded}">
+            <span class="file-item__name">${safe}</span>
+            <span class="file-item__meta">${isActive ? "affiché" : "ouvrir"}</span>
+          </button>
+          <div class="file-item__actions">
+            <button class="btn btn--ghost btn--sm" type="button" data-preview-file="${encoded}">JSON</button>
+            <button class="btn btn--danger btn--sm" type="button" data-delete-file="${encoded}">Suppr.</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+async function loadFiles() {
+  try {
+    const files = await discoverFiles();
+    renderFiles(files);
+  } catch (error) {
+    filesList.innerHTML = `<p class="empty-state">Impossible de lister les fichiers.</p>`;
+    showToast(error.message, "error");
+  }
+}
+
+async function switchToLive() {
+  viewMode = "live";
+  selectedFile = null;
+  updateViewChrome();
+  await Promise.all([loadFiles(), loadLiveBuckets({ resetAnim: true })]);
+  showToast("Vue mémoire serveur", "info");
+}
+
+async function deleteFile(filename) {
+  const confirmed = window.confirm(`Supprimer le fichier « ${filename} » ?`);
+  if (!confirmed) return;
+
+  try {
+    await api.deleteFile(filename);
+    forgetFile(filename);
+    showToast(`Fichier « ${filename} » supprimé`, "success");
+
+    if (viewMode === "file" && selectedFile === filename) {
+      await switchToLive();
+    } else {
+      await loadFiles();
+    }
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
+async function previewFile(filename) {
+  try {
+    const content = await api.getFile(filename);
+    previewSubtitle.textContent = filename;
+    previewContent.textContent = JSON.stringify(content, null, 2);
+    openModal(modalPreview);
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
 function openCreateModal() {
   createForm.reset();
+  updateViewChrome();
   openModal(modalCreate, createKey);
 }
 
@@ -244,6 +436,10 @@ function openLookupModal(prefill = "") {
   lookupResult.innerHTML = "";
   if (prefill) lookupKey.value = prefill;
   openModal(modalLookup, lookupKey);
+}
+
+function openSeedModal() {
+  openModal(modalSeed, seedCount);
 }
 
 async function openEditForKey(key) {
@@ -279,20 +475,40 @@ document.querySelectorAll("[data-open-modal]").forEach((button) => {
     const name = button.getAttribute("data-open-modal");
     if (name === "create") openCreateModal();
     if (name === "lookup") openLookupModal();
+    if (name === "seed") openSeedModal();
   });
 });
 
 document.querySelectorAll(".modal").forEach((modal) => {
   modal.addEventListener("click", (event) => {
-    if (event.target.closest("[data-close-modal]")) {
-      closeModal(modal);
-    }
+    if (event.target.closest("[data-close-modal]")) closeModal(modal);
   });
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && activeModal) {
-    closeModal(activeModal);
+  if (event.key === "Escape" && activeModal) closeModal(activeModal);
+});
+
+createFileForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  let filename = newFilename.value.trim();
+  if (!filename) {
+    showToast("Nom de fichier requis", "error");
+    return;
+  }
+  if (!filename.endsWith(".json")) filename = `${filename}.json`;
+
+  createFileSubmit.disabled = true;
+  try {
+    await api.createFile(filename);
+    rememberFile(filename);
+    newFilename.value = "";
+    showToast(`Fichier « ${filename} » créé`, "success");
+    await loadFiles();
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    createFileSubmit.disabled = false;
   }
 });
 
@@ -308,10 +524,17 @@ createForm.addEventListener("submit", async (event) => {
 
   createSubmit.disabled = true;
   try {
-    await api.create(key, value);
-    closeModal(modalCreate);
-    showToast(`Clé « ${key} » créée`, "success");
-    await loadBuckets();
+    if (viewMode === "file" && selectedFile) {
+      await api.insertIntoFile(selectedFile, key, value);
+      closeModal(modalCreate);
+      showToast(`Clé « ${key} » insérée dans ${selectedFile}`, "success");
+      await loadFileBuckets(selectedFile, { resetAnim: false });
+    } else {
+      await api.create(key, value);
+      closeModal(modalCreate);
+      showToast(`Clé « ${key} » créée`, "success");
+      await loadLiveBuckets();
+    }
   } catch (error) {
     showToast(error.message, "error");
   } finally {
@@ -334,7 +557,7 @@ editForm.addEventListener("submit", async (event) => {
     await api.update(key, value);
     closeModal(modalEdit);
     showToast(`Clé « ${key} » mise à jour`, "success");
-    await loadBuckets();
+    if (viewMode === "live") await loadLiveBuckets();
   } catch (error) {
     showToast(error.message, "error");
   } finally {
@@ -366,7 +589,45 @@ lookupForm.addEventListener("submit", async (event) => {
   }
 });
 
-async function handleDelete(key) {
+seedForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const count = Number(seedCount.value);
+  if (!Number.isFinite(count) || count < 1) {
+    showToast("Nombre d’insertions invalide", "error");
+    return;
+  }
+
+  seedGenerate.disabled = true;
+  try {
+    const result = await api.generateSeed(count);
+    if (result?.success === false) throw new Error("Génération du seed échouée");
+    showToast(`Seed généré (${count} entrées)`, "success");
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    seedGenerate.disabled = false;
+  }
+});
+
+seedRun.addEventListener("click", async () => {
+  seedRun.disabled = true;
+  try {
+    const result = await api.runSeed();
+    showToast(result.message || "Seed terminé", result.success ? "success" : "error");
+    rememberFile("cache.json");
+    if (viewMode === "live") await loadLiveBuckets({ resetAnim: true });
+    else if (selectedFile === "cache.json") {
+      await loadFileBuckets("cache.json", { resetAnim: true });
+    }
+    await loadFiles();
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    seedRun.disabled = false;
+  }
+});
+
+async function handleDeleteKey(key) {
   const confirmed = window.confirm(`Supprimer la clé « ${key} » ?`);
   if (!confirmed) return;
 
@@ -374,13 +635,33 @@ async function handleDelete(key) {
     await api.remove(key);
     if (activeModal === modalLookup) closeModal(modalLookup);
     showToast(`Clé « ${key} » supprimée`, "success");
-    await loadBuckets();
+    if (viewMode === "live") await loadLiveBuckets();
   } catch (error) {
     showToast(error.message, "error");
   }
 }
 
 document.body.addEventListener("click", async (event) => {
+  const selectBtn = event.target.closest("[data-select-file]");
+  if (selectBtn) {
+    const filename = decodeURIComponent(selectBtn.getAttribute("data-select-file"));
+    await loadFileBuckets(filename);
+    showToast(`Fichier affiché : ${filename}`, "info");
+    return;
+  }
+
+  const previewBtn = event.target.closest("[data-preview-file]");
+  if (previewBtn) {
+    await previewFile(decodeURIComponent(previewBtn.getAttribute("data-preview-file")));
+    return;
+  }
+
+  const deleteFileBtn = event.target.closest("[data-delete-file]");
+  if (deleteFileBtn) {
+    await deleteFile(decodeURIComponent(deleteFileBtn.getAttribute("data-delete-file")));
+    return;
+  }
+
   const editBtn = event.target.closest("[data-edit]");
   if (editBtn) {
     const key = decodeURIComponent(editBtn.getAttribute("data-edit"));
@@ -412,17 +693,28 @@ document.body.addEventListener("click", async (event) => {
 
   const deleteBtn = event.target.closest("[data-delete]");
   if (deleteBtn) {
-    const key = decodeURIComponent(deleteBtn.getAttribute("data-delete"));
-    await handleDelete(key);
+    await handleDeleteKey(decodeURIComponent(deleteBtn.getAttribute("data-delete")));
   }
+});
+
+liveBtn.addEventListener("click", async () => {
+  await switchToLive();
 });
 
 refreshBtn.addEventListener("click", async () => {
   refreshBtn.disabled = true;
-  await Promise.all([checkHealth(), loadBuckets()]);
+  await checkHealth();
+  await loadFiles();
+  if (viewMode === "file" && selectedFile) {
+    await loadFileBuckets(selectedFile, { resetAnim: false });
+  } else {
+    await loadLiveBuckets();
+  }
   refreshBtn.disabled = false;
   showToast("Vue actualisée", "info");
 });
 
+updateViewChrome();
 checkHealth();
-loadBuckets();
+loadFiles();
+loadLiveBuckets();
