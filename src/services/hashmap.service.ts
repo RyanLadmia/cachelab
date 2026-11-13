@@ -124,7 +124,6 @@ export default class HashMap<K extends PropertyKey, V> {
     }
 
     async saveToDisk(): Promise<void> {
-        // Si ce n'est pas persistant OU qu'il n'y a rien à sauvegarder, on annule
         if (!this.isPersistent || this.unsavedInsertions === 0) return;
 
         await this.persist();
@@ -197,6 +196,52 @@ export default class HashMap<K extends PropertyKey, V> {
         console.log(keys);
         return keys;
     }
+
+    getBucketsSnapshot() {
+        let collisions = 0;
+        let occupied = 0;
+
+        const buckets = this.collection.map((bucket, index) => {
+            if (bucket === null) {
+                return {
+                    index,
+                    type: "empty" as const,
+                    entries: [] as HashmapValue<K, V | null>[],
+                };
+            }
+
+            occupied += 1;
+
+            if (Array.isArray(bucket)) {
+                collisions += 1;
+                return {
+                    index,
+                    type: "collision" as const,
+                    entries: bucket.map((entry) => ({
+                        key: entry.key,
+                        value: entry.value,
+                    })),
+                };
+            }
+
+            return {
+                index,
+                type: "single" as const,
+                entries: [{ key: bucket.key, value: bucket.value }],
+            };
+        });
+
+        return {
+            length: this.currentLength,
+            load: this.currentLoad,
+            loadFactor: this.loadFactor,
+            loadLimit: this.indexLimitFactor,
+            occupied,
+            collisions,
+            buckets,
+        };
+    }
+
 
     getKeyValue(key: K): V | null {
         const entry = this.findEntry(key);

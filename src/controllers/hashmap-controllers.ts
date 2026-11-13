@@ -11,6 +11,10 @@ export function MyHashMapController(hashmap: HashMap<string, string>) {
             return hashmap.getAllKeys()
         },
 
+        getBuckets: async function () {
+            return hashmap.getBucketsSnapshot()
+        },
+
         getOne: async function ( request: FastifyRequest<{Params: KeyParams}>, reply: FastifyReply) {
             const value = hashmap.getKeyValue(request.params.key);
 

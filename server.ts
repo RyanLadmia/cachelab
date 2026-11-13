@@ -34,11 +34,16 @@ async function main() {
     fastify.get('/UI', (request, reply) => {
         reply.redirect('/UI/');
     });
-
-    fastify.get('/', async function() {
-        return { status: 'OK\n' };
+    
+    fastify.get('/', async function(_request, reply) {
+        return reply.redirect('/UI/');
     });
 
+    fastify.get('/health', async function() {
+        return { status: 'OK' };
+    });
+
+    fastify.get('/buckets', hashMapController.getBuckets);
     fastify.get('/keys', hashMapController.getAll);
     fastify.get('/keys/:key', hashMapController.getOne);
     fastify.post('/keys', hashMapController.create);
