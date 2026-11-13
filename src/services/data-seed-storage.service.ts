@@ -56,7 +56,7 @@ export default class DataSeeder {
 
                 const emptyData: any[] = []; 
                 await fs.writeFile(this.DATA_FILE, JSON.stringify(emptyData), "utf-8"); // enlevé null 2 pour éviter les doublons lors de l'écriture
-                // solution alternative
+
                 return emptyData;
             }
 

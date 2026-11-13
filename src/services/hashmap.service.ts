@@ -13,14 +13,11 @@ export default class HashMap<K extends PropertyKey, V> {
     private currentLoad: number = 0; 
     private dataStorage : DataStorage = new DataStorage();
 
-    // Propriété de persistance (RAM vs Disque)
     private isPersistent: boolean;
 
-    // Variables pour le batching en mémoire
     private unsavedInsertions: number = 0;
     private readonly BATCH_SAVE_LIMIT: number = 500;
 
-    // Le constructeur permet d'instancier en mode persistant (défaut) ou 100% RAM (false)
     constructor(isPersistent: boolean = true) {
         this.isPersistent = isPersistent;
     }
@@ -120,7 +117,7 @@ export default class HashMap<K extends PropertyKey, V> {
 
         if (this.unsavedInsertions >= this.BATCH_SAVE_LIMIT) {
             await this.saveToDisk();
-        }
+        } // vérifier si ça save en dessous de BATCH_SAVE_LIMIT
     }
 
     async saveToDisk(): Promise<void> {
@@ -175,7 +172,6 @@ export default class HashMap<K extends PropertyKey, V> {
     
     verifyLoadFactor(): void {}
 
-    // ---- NOUVEAU : Méthode pour obtenir l'itérateur ----
     public getIterator(): CollectionIterator<Bucket<K, V>> {
         return new CollectionIterator<Bucket<K, V>>(this.collection);
     }
@@ -257,7 +253,7 @@ export default class HashMap<K extends PropertyKey, V> {
             return false;
         }
         entry.value = newValue;
-        await this.persist(); // Si isPersistent est false, ça ne fera rien (sécurisé)
+        await this.persist(); // Si isPersistent est false, ça ne fera rien en espace Disque
         return true;
     }
 

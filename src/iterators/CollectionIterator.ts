@@ -1,4 +1,3 @@
-// collection-iterator.ts
 import { MyCollection, Slot } from "../models/CollectionType";
 
 export default class CollectionIterator<T> {
@@ -10,12 +9,10 @@ export default class CollectionIterator<T> {
         this.collection = collection;
     }
 
-    // Récupère l'élément actuel
     getCurrent(): T {
         return this.collection[this.index];
     }
 
-    // Avance d'un cran et retourne la valeur (très utile pour les boucles while)
     next(): T | null {
         if (!this.isValid()) return null;
         const value = this.collection[this.index];
@@ -24,7 +21,7 @@ export default class CollectionIterator<T> {
     }
 
     isValid(): boolean {
-        return this.index < this.collection.length; // Plus sécurisé contre les index out of bounds
+        return this.index < this.collection.length; 
     }
 
     rewind(): void {

@@ -6,7 +6,8 @@ import { Bucket } from "../types/hashmap.types";
 
 export default class Aggregator<K extends PropertyKey, V> {
     
-    private collections: Record<string, HashMap<K, V>> = {};
+    private collections: Record<string, HashMap<K, V>> = {}; // Mettre Collection Iterator 
+    // Un itérator est forcément associé a un hashmap, un hashmap n'existe pas seul
 
     public createCollection(name: string, isPersistent: boolean): HashMap<K, V> {
         if (this.collections[name]) {

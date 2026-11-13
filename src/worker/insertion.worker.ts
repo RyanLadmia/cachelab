@@ -24,7 +24,6 @@ async processSeeding(seedFileName: string = "init.json", targetMapName: string =
 
         let collection = new HashMap<string, any>();
         
-        // On indique à la HashMap où elle doit sauvegarder ses données
         collection.setStorageFile(targetFilePath);        
         await collection.onStart(); // Restaure le cache existant s'il y en a un
 
@@ -33,8 +32,6 @@ async processSeeding(seedFileName: string = "init.json", targetMapName: string =
         return { success: true, count: seedData.length };
     }
 
-    // Boucle d'insertion isolée
-    // Boucle d'insertion isolée
     private async seedLoop(seedData: any[], map: HashMap<string, any>) {
         console.log(`Début de l'insertion de ${seedData.length} éléments...`);
         
@@ -44,7 +41,6 @@ async processSeeding(seedFileName: string = "init.json", targetMapName: string =
             }
         }
         
-        // TRES IMPORTANT : On force la sauvegarde pour les éléments restants (ceux qui n'ont pas atteint la limite de 500)
         await map.saveToDisk();
         
         console.log("Insertion terminée avec succès !");
