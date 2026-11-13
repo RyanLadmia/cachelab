@@ -16,7 +16,6 @@ export default class DataSeeder {
 
             let array = [];
 
-                // i < numberOfInsertion au lieu de <=
             for (let i = 0; i < numberOfInsertion; i++) { 
                 array.push({key: `product-${i}`, value: i});
             }

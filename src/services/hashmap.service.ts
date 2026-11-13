@@ -1,15 +1,7 @@
 import { createHash } from "crypto";
 import DataStorage from "./data-storage.service";
-
-type HashmapValue<K extends PropertyKey, V> = { 
-    key: K;
-    value: V;
-}
-
-type Bucket<K extends PropertyKey, V> = 
-    | HashmapValue<K, V | null> 
-    | HashmapValue<K, V | null>[] 
-    | null;
+import { HashmapValue, Bucket } from "../types/hashmap.types";
+import CollectionIterator from "../iterators/CollectionIterator"; // <-- Ajoutez le bon chemin ici
 
 export default class HashMap<K extends PropertyKey, V> {
     
@@ -21,9 +13,17 @@ export default class HashMap<K extends PropertyKey, V> {
     private currentLoad: number = 0; 
     private dataStorage : DataStorage = new DataStorage();
 
+    // Propriété de persistance (RAM vs Disque)
+    private isPersistent: boolean;
+
     // Variables pour le batching en mémoire
     private unsavedInsertions: number = 0;
     private readonly BATCH_SAVE_LIMIT: number = 500;
+
+    // Le constructeur permet d'instancier en mode persistant (défaut) ou 100% RAM (false)
+    constructor(isPersistent: boolean = true) {
+        this.isPersistent = isPersistent;
+    }
 
     private getIndex(key: K, length: number = this.collection.length): number {
          const hash = createHash('sha256').update(String(key));        
@@ -54,6 +54,9 @@ export default class HashMap<K extends PropertyKey, V> {
     }
 
     private async persist(): Promise<void> {
+        // Bloque l'écriture si la HashMap est configurée pour rester uniquement en RAM
+        if (!this.isPersistent) return;
+        
         await this.dataStorage.save(this.collection);
     }
 
@@ -81,6 +84,13 @@ export default class HashMap<K extends PropertyKey, V> {
     }
 
     async onStart(): Promise<void> {
+        // Si 100% RAM, pas besoin de charger de fichier
+        if (!this.isPersistent) {
+            this.computeLoadFactor();
+            this.computeCurrentLoad();
+            return;
+        }
+
         const parsedData = await this.dataStorage.load();
         
         if (parsedData) {
@@ -114,7 +124,8 @@ export default class HashMap<K extends PropertyKey, V> {
     }
 
     async saveToDisk(): Promise<void> {
-        if (this.unsavedInsertions === 0) return;
+        // Si ce n'est pas persistant OU qu'il n'y a rien à sauvegarder, on annule
+        if (!this.isPersistent || this.unsavedInsertions === 0) return;
 
         await this.persist();
         
@@ -165,6 +176,11 @@ export default class HashMap<K extends PropertyKey, V> {
     
     verifyLoadFactor(): void {}
 
+    // ---- NOUVEAU : Méthode pour obtenir l'itérateur ----
+    public getIterator(): CollectionIterator<Bucket<K, V>> {
+        return new CollectionIterator<Bucket<K, V>>(this.collection);
+    }
+
     getAllKeys(): K[] {
         const keys: K[] = [];
         for (const bucket of this.collection) {
@@ -196,7 +212,7 @@ export default class HashMap<K extends PropertyKey, V> {
             return false;
         }
         entry.value = newValue;
-        await this.persist();
+        await this.persist(); // Si isPersistent est false, ça ne fera rien (sécurisé)
         return true;
     }
 

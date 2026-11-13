@@ -1,29 +1,24 @@
 import path from "path";
 import { promises as fs } from "fs";
 
-// Persistent file for cache
 export default class DataStorage {
-    // Backup folder name
     public DATA_DIR = path.join(process.cwd(), "data");
-    // Backup file name
     public DATA_FILE = path.join(this.DATA_DIR, "cache.json"); // by default
 
-    // Check if Folder data and cache.json file exists and create them if needed
     async ensureStore() {
-        await fs.mkdir(this.DATA_DIR, { recursive: true }); // avoid error if data folder doesn't exists
+        await fs.mkdir(this.DATA_DIR, { recursive: true }); 
         try {
             await fs.access(this.DATA_FILE);
         } catch {
             await fs.writeFile(this.DATA_FILE, JSON.stringify(Array(8).fill(null)), "utf-8");
         }
     }
-
-    // Switch the active storage file (fot later with multiple stores)
+    // pour changer de hashmap
     selectDataFile(value: string){
         this.DATA_FILE = value
     }
 
-    // Load and pase the current Json store
+    // load le current hashmap
     async load(): Promise<unknown[] | null> {
         await this.ensureStore();
 
@@ -38,8 +33,7 @@ export default class DataStorage {
     async save(collection: unknown[]): Promise<void> {
         await this.ensureStore();
 
-        await fs.writeFile(this.DATA_FILE, JSON.stringify(collection), "utf-8"
-        );
+        await fs.writeFile(this.DATA_FILE, JSON.stringify(collection), "utf-8");
     }
 
     

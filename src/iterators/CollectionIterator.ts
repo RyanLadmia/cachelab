@@ -1,29 +1,33 @@
+// collection-iterator.ts
 import { MyCollection, Slot } from "../models/CollectionType";
 
-export default class CollectionIterator<T>{
+export default class CollectionIterator<T> {
 
-    private collection: MyCollection<T>;
+    private collection: Array<T>; // Adapté pour être générique
     private index = 0;
 
     constructor(collection: Array<T>){
         this.collection = collection;
     }
 
-    getNext(){
-        return this.collection[this.index + 1];
-    };
-
-    getIndex(){
+    // Récupère l'élément actuel
+    getCurrent(): T {
         return this.collection[this.index];
-    };
-
-    isValid(): boolean{
-        if (this.collection[this.index]) return true
-        else return false
     }
 
-    rewind(){
+    // Avance d'un cran et retourne la valeur (très utile pour les boucles while)
+    next(): T | null {
+        if (!this.isValid()) return null;
+        const value = this.collection[this.index];
+        this.index++;
+        return value;
+    }
+
+    isValid(): boolean {
+        return this.index < this.collection.length; // Plus sécurisé contre les index out of bounds
+    }
+
+    rewind(): void {
         this.index = 0;
     }
-
 }

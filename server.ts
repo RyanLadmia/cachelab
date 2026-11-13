@@ -31,24 +31,20 @@ async function main() {
 
     const hashMapController = MyHashMapController(cache);
 
-    // --- UI ROUTES ---
     fastify.get('/UI', (request, reply) => {
         reply.redirect('/UI/');
     });
 
-    // --- BASE ROUTE ---
     fastify.get('/', async function() {
         return { status: 'OK\n' };
     });
 
-    // --- CRUD HASHMAP ROUTES (via Controller) ---
     fastify.get('/keys', hashMapController.getAll);
     fastify.get('/keys/:key', hashMapController.getOne);
     fastify.post('/keys', hashMapController.create);
     fastify.put('/keys/:key', hashMapController.update);
     fastify.delete('/keys/:key', hashMapController.remove);
 
-    // --- FILE MANAGER ROUTES ---
     fastify.get('/api/files', async (request, reply) => {
         let storage = new DataStorage();
         return await storage.listStore();
@@ -81,7 +77,6 @@ async function main() {
         return { success: true };
     });
 
-    // --- INSERTION ROUTES ---
     fastify.post('/api/insert', async (request, reply) => {
         const { filename, key, value } = request.body as { filename: string, key: string, value: any };
         let map = new HashMap<string, any>();
@@ -93,7 +88,6 @@ async function main() {
         return { success: true };
     });
 
-    // --- WORKER & SEEDER ROUTES ---
     fastify.get('/data-seeder', async function (request, reply){
         const query = request.query as { numberOfInsertion: string };
         const numberOfInsertion = parseInt(query.numberOfInsertion, 10);
@@ -120,7 +114,6 @@ async function main() {
         }
     });
 
-    // Démarrage du serveur
     await fastify.listen({ port: 3001, host: '0.0.0.0' });
     fastify.log.info(`Serveur lancé sur http://127.0.0.1:3001`);
 }
