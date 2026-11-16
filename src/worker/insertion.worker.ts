@@ -1,19 +1,19 @@
 import DataSeeder from "../services/data-seed-storage.service";
+import Aggregator from "../services/agregator.service";
 import HashMap from "../services/hashmap.service";
-import path from "path";
 
 export default class InsertionWorker {
 
     private dataSeeder: DataSeeder;
+    private aggregator: Aggregator<string, any>;
 
-    constructor() {
-        this.dataSeeder = new DataSeeder();
+    constructor(aggregator: Aggregator<string, any>, dataSeeder: DataSeeder) {
+        this.aggregator = aggregator;
+        this.dataSeeder = dataSeeder; 
     }
-
-async processSeeding(seedFileName: string = "init.json", targetMapName: string = "cache.json") {
+    // cache fait référence a cache.json
+    async processSeeding(seedFileName: string = "init.json", targetMapName: string = "cache") {
         
-        const targetFilePath = path.join(process.cwd(), 'data', targetMapName);
-
         this.dataSeeder.selectDataFile(seedFileName);
         const seedData = await this.dataSeeder.getSeedFile();
 
@@ -22,26 +22,27 @@ async processSeeding(seedFileName: string = "init.json", targetMapName: string =
             return { success: false, count: 0 };
         }
 
-        let collection = new HashMap<string, any>();
-        
-        collection.setStorageFile(targetFilePath);        
-        await collection.onStart(); // Restaure le cache existant s'il y en a un
+        try {
+            this.aggregator.getCollection(targetMapName);
+        } catch {
+            await this.aggregator.loadCollectionFromFile(targetMapName);
+        }
 
-        await this.seedLoop(seedData, collection);
+        await this.seedLoop(seedData, targetMapName);
 
         return { success: true, count: seedData.length };
     }
 
-    private async seedLoop(seedData: any[], map: HashMap<string, any>) {
+    private async seedLoop(seedData: any[], collectionName: string) {
         console.log(`Début de l'insertion de ${seedData.length} éléments...`);
         
         for (const item of seedData) {
             if (item && item.key !== undefined) {
-                await map.insert({ key: String(item.key), value: item.value });
+                await this.aggregator.insert(collectionName, { key: String(item.key), value: item.value });
             }
         }
         
-        await map.saveToDisk();
+        await this.aggregator.saveCollection(collectionName);
         
         console.log("Insertion terminée avec succès !");
     }

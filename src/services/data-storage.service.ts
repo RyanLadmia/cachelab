@@ -50,7 +50,7 @@ export default class DataStorage {
                 console.log(file);
             });
             
-            console.log(fileList,"list des fichiers après traitement")
+            console.log(fileList,"fileList")
             
         } catch (error) {
             

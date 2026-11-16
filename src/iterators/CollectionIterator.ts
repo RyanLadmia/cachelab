@@ -1,5 +1,5 @@
-import { MyCollection, Slot } from "../models/CollectionType";
-
+import { MyCollection, Slot } from "../types/CollectionType";
+// template php iterator
 export default class CollectionIterator<T> {
 
     private collection: Array<T>; // Adapté pour être générique

@@ -38,34 +38,45 @@ export const api = {
     return request("/health");
   },
 
-  getAllKeys() {
-    return request("/keys");
+  // --- ROUTES D'AGRÉGATEUR ---
+  createCollection(name, isPersistent) {
+    return request("/api/collections", {
+      method: "POST",
+      body: JSON.stringify({ name, isPersistent }),
+    });
   },
 
-  getBuckets() {
-    return request("/buckets");
+  // --- ROUTES SPÉCIFIQUES AUX COLLECTIONS ---
+  // Nous passons maintenant le paramètre 'collection' (qui vaut 'cache' par défaut)
+
+  getAllKeys(collection = "cache") {
+    return request(`/api/${encodeURIComponent(collection)}/keys`);
   },
 
-  getOne(key) {
-    return request(`/keys/${encodeURIComponent(key)}`);
+  getBuckets(collection = "cache") {
+    return request(`/api/${encodeURIComponent(collection)}/buckets`);
   },
 
-  create(key, value) {
-    return request("/keys", {
+  getOne(collection = "cache", key) {
+    return request(`/api/${encodeURIComponent(collection)}/keys/${encodeURIComponent(key)}`);
+  },
+
+  create(collection = "cache", key, value) {
+    return request(`/api/${encodeURIComponent(collection)}/keys`, {
       method: "POST",
       body: JSON.stringify({ key, value }),
     });
   },
 
-  update(key, value) {
-    return request(`/keys/${encodeURIComponent(key)}`, {
+  update(collection = "cache", key, value) {
+    return request(`/api/${encodeURIComponent(collection)}/keys/${encodeURIComponent(key)}`, {
       method: "PUT",
       body: JSON.stringify({ value }),
     });
   },
 
-  remove(key) {
-    return request(`/keys/${encodeURIComponent(key)}`, {
+  remove(collection = "cache", key) {
+    return request(`/api/${encodeURIComponent(collection)}/keys/${encodeURIComponent(key)}`, {
       method: "DELETE",
     });
   },

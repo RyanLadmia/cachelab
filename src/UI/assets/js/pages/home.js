@@ -1,6 +1,27 @@
 import { api } from "../api.js";
 import { escapeHtml, showToast } from "../common.js";
 
+// NOUVEAU: Gestion du state de la collection
+const collectionSelect = document.getElementById("collection-select");
+const activeCollectionBadge = document.getElementById("active-collection-badge");
+let activeCollection = "cache";
+
+// --- GESTION DE LA COLLECTION ACTIVE ---
+collectionSelect.addEventListener("change", async (e) => {
+  activeCollection = e.target.value;
+  activeCollectionBadge.textContent = activeCollection;
+  previousSnapshot = null; // On reset l'animation de diff
+  showToast(`Changement vers la collection : ${activeCollection}`, "info");
+  await loadBuckets();
+});
+
+// Nouveaux éléments modale collection
+const modalNewCollection = document.getElementById("modal-new-collection");
+const newCollectionForm = document.getElementById("new-collection-form");
+const collectionNameInput = document.getElementById("collection-name");
+const collectionPersistInput = document.getElementById("collection-persist");
+const collectionSubmit = document.getElementById("collection-submit");
+
 const bucketsGrid = document.getElementById("buckets-grid");
 const bucketsMeta = document.getElementById("buckets-meta");
 const healthBadge = document.getElementById("health-badge");
@@ -180,7 +201,8 @@ async function checkHealth() {
 async function loadBuckets({ quiet = false } = {}) {
   return keepScroll(async () => {
     try {
-      const snapshot = await api.getBuckets();
+      // AJOUT : Passage de activeCollection
+      const snapshot = await api.getBuckets(activeCollection);
       updateStats(snapshot);
 
       if (!Array.isArray(snapshot.buckets) || snapshot.buckets.length === 0) {
@@ -220,7 +242,7 @@ async function loadBuckets({ quiet = false } = {}) {
       previousSnapshot = snapshot;
     } catch (error) {
       if (!quiet) {
-        bucketsGrid.innerHTML = `<p class="empty-state">Impossible de charger les buckets.</p>`;
+        bucketsGrid.innerHTML = `<p class="empty-state">Impossible de charger les buckets de ${activeCollection}.</p>`;
         showToast(error.message, "error");
       }
     }
@@ -248,7 +270,8 @@ function openLookupModal(prefill = "") {
 
 async function openEditForKey(key) {
   try {
-    const entry = await api.getOne(key);
+    // AJOUT : Passage de activeCollection
+    const entry = await api.getOne(activeCollection, key);
     openEditModal(entry.key, entry.value ?? "");
   } catch (error) {
     showToast(error.message, "error");
@@ -279,6 +302,10 @@ document.querySelectorAll("[data-open-modal]").forEach((button) => {
     const name = button.getAttribute("data-open-modal");
     if (name === "create") openCreateModal();
     if (name === "lookup") openLookupModal();
+    if (name === "new-collection") {
+       newCollectionForm.reset();
+       openModal(modalNewCollection, collectionNameInput);
+    }
   });
 });
 
@@ -296,6 +323,43 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// NOUVEAU: Formulaire de création de collection
+newCollectionForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = collectionNameInput.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  const isPersistent = collectionPersistInput.checked;
+
+  if (!name) {
+    showToast("Le nom est obligatoire et doit être valide", "error");
+    return;
+  }
+
+  collectionSubmit.disabled = true;
+  try {
+    await api.createCollection(name, isPersistent);
+    
+    // Ajoute l'option au select si elle n'y est pas déjà
+    let optionExists = Array.from(collectionSelect.options).some(opt => opt.value === name);
+    if (!optionExists) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = `Collection: ${name}`;
+      collectionSelect.appendChild(option);
+    }
+    
+    // Bascule automatiquement sur la nouvelle collection
+    collectionSelect.value = name;
+    collectionSelect.dispatchEvent(new Event("change"));
+
+    closeModal(modalNewCollection);
+    showToast(`Collection « ${name} » créée`, "success");
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    collectionSubmit.disabled = false;
+  }
+});
+
 createForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const key = createKey.value.trim();
@@ -308,9 +372,10 @@ createForm.addEventListener("submit", async (event) => {
 
   createSubmit.disabled = true;
   try {
-    await api.create(key, value);
+    // AJOUT : Passage de activeCollection
+    await api.create(activeCollection, key, value);
     closeModal(modalCreate);
-    showToast(`Clé « ${key} » créée`, "success");
+    showToast(`Clé « ${key} » créée dans ${activeCollection}`, "success");
     await loadBuckets();
   } catch (error) {
     showToast(error.message, "error");
@@ -331,7 +396,8 @@ editForm.addEventListener("submit", async (event) => {
 
   editSubmit.disabled = true;
   try {
-    await api.update(key, value);
+    // AJOUT : Passage de activeCollection
+    await api.update(activeCollection, key, value);
     closeModal(modalEdit);
     showToast(`Clé « ${key} » mise à jour`, "success");
     await loadBuckets();
@@ -352,7 +418,8 @@ lookupForm.addEventListener("submit", async (event) => {
 
   lookupSubmit.disabled = true;
   try {
-    const entry = await api.getOne(key);
+    // AJOUT : Passage de activeCollection
+    const entry = await api.getOne(activeCollection, key);
     renderLookupResult(entry);
   } catch (error) {
     lookupResult.hidden = false;
@@ -367,11 +434,12 @@ lookupForm.addEventListener("submit", async (event) => {
 });
 
 async function handleDelete(key) {
-  const confirmed = window.confirm(`Supprimer la clé « ${key} » ?`);
+  const confirmed = window.confirm(`Supprimer la clé « ${key} » de la collection ${activeCollection} ?`);
   if (!confirmed) return;
 
   try {
-    await api.remove(key);
+    // AJOUT : Passage de activeCollection
+    await api.remove(activeCollection, key);
     if (activeModal === modalLookup) closeModal(modalLookup);
     showToast(`Clé « ${key} » supprimée`, "success");
     await loadBuckets();
@@ -395,7 +463,8 @@ document.body.addEventListener("click", async (event) => {
     openLookupModal(key);
     lookupSubmit.disabled = true;
     try {
-      const entry = await api.getOne(key);
+      // AJOUT : Passage de activeCollection
+      const entry = await api.getOne(activeCollection, key);
       renderLookupResult(entry);
     } catch (error) {
       lookupResult.hidden = false;

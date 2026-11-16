@@ -19,6 +19,16 @@
           <span class="brand__name">CacheLab</span>
           <span class="brand__tag">hashmap</span>
         </div>
+        
+        <!-- NOUVEAU: Sélecteur de collection -->
+        <div class="collection-switcher" style="display: flex; gap: 0.5rem; align-items: center;">
+          <select id="collection-select" class="field__control field__control--mono" style="min-height: auto; padding: 0.3rem 0.5rem; border-radius: 4px;">
+            <option value="cache" selected>Collection: cache</option>
+            <!-- D'autres options peuvent être ajoutées ici dynamiquement ou via JS -->
+          </select>
+          <button class="btn btn--ghost btn--sm" type="button" data-open-modal="new-collection" title="Nouvelle collection">+</button>
+        </div>
+
         <nav class="nav" aria-label="Actions">
           <button class="nav__link is-active" type="button" data-open-modal="create">
             Créer
@@ -43,6 +53,10 @@
         <div id="health-badge" class="badge">
           <span class="badge__dot"></span>
           Vérification API…
+        </div>
+        <!-- NOUVEAU: Indicateur de collection active -->
+        <div class="badge" style="background: var(--color-ink); color: white; border-color: transparent;">
+           Collection active : <span id="active-collection-badge" style="font-weight: bold; margin-left: 0.2rem;">cache</span>
         </div>
         <button class="btn btn--accent btn--sm" type="button" data-open-modal="create">
           Nouvelle entrée
@@ -103,6 +117,35 @@
           </div>
         </div>
       </section>
+    </div>
+
+    <!-- ... (Les modales Create, Edit et Lookup restent identiques, ne changeant que par JS) ... -->
+    <!-- NOUVELLE MODALE : Créer une collection -->
+    <div id="modal-new-collection" class="modal" role="dialog" aria-modal="true" aria-labelledby="new-collection-title" hidden>
+      <div class="modal__backdrop" data-close-modal></div>
+      <div class="modal__dialog">
+        <div class="modal__header">
+          <div>
+            <h2 id="new-collection-title" class="modal__title">Nouvelle Collection</h2>
+            <p class="modal__subtitle">Initialise une nouvelle HashMap via l'Agrégateur.</p>
+          </div>
+          <button class="modal__close" type="button" data-close-modal aria-label="Fermer">×</button>
+        </div>
+        <form id="new-collection-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="collection-name">Nom de la collection</label>
+            <input id="collection-name" class="field__control field__control--mono" name="name" type="text" required autocomplete="off" placeholder="ex: utilisateurs" />
+          </div>
+          <div class="field" style="display: flex; align-items: center; gap: 0.5rem; flex-direction: row;">
+            <input id="collection-persist" type="checkbox" name="isPersistent" checked style="width: 1.2rem; height: 1.2rem;" />
+            <label class="field__label" for="collection-persist" style="margin: 0; cursor: pointer;">Sauvegarder sur disque (Persistant)</label>
+          </div>
+          <div class="form-actions" style="margin-top: 1.5rem;">
+            <button id="collection-submit" class="btn btn--accent" type="submit">Créer</button>
+            <button class="btn btn--ghost" type="button" data-close-modal>Annuler</button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <div id="modal-create" class="modal" role="dialog" aria-modal="true" aria-labelledby="create-title" hidden>

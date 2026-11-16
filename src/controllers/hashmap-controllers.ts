@@ -1,59 +1,81 @@
 import { FastifyReply, FastifyRequest } from 'fastify' 
-import HashMap from "../services/hashmap.service"
+import Aggregator from '../services/agregator.service'
 
-type KeyParams = { key: string }
-type CreateBody = { key: string, value: string}
+type CollectionParams = { collection: string }
+type KeyParams = { collection: string, key: string }
+type CreateBody = { key: string, value: string }
 type UpdateBody = { value: string }
 
-export function MyHashMapController(hashmap: HashMap<string, string>) {
+// permet le CRUD de l'agrégateur 
+export function MyHashMapController(aggregator: Aggregator<string, any>) {
+    
+    const getMapOrThrow = (collectionName: string) => {
+        return aggregator.getCollection(collectionName);
+    }; // getter, vu que y'a pas de this non plus
+
     return {
-        getAll: async function () {
-            return hashmap.getAllKeys()
-        },
-
-        getBuckets: async function () {
-            return hashmap.getBucketsSnapshot()
-        },
-
-        getOne: async function ( request: FastifyRequest<{Params: KeyParams}>, reply: FastifyReply) {
-            const value = hashmap.getKeyValue(request.params.key);
-
-            if (value === null) {
-                return reply.code(404).send({ error: `Key "${request.params.key}" not found `})
-            }
-            return { key: request.params.key, value }
-        },
-
-        create: async function (request: FastifyRequest<{Body: CreateBody}>, reply: FastifyReply) {
-            const { key, value } = request.body;
-
-            if (!key) {
-                return reply.code(400).send({error: 'Key is required'})
-            }
+        getAll: async function (request: FastifyRequest<{Params: CollectionParams}>, reply: FastifyReply) {
             try {
-                await hashmap.insert({key, value})
-                return reply.code(201).send({key, value})
+                return getMapOrThrow(request.params.collection).getAllKeys();
             } catch (error) {
-                return reply.code(409).send({error: error instanceof Error ? error.message : 'Insertion failed'})
+                return reply.code(404).send({ error: error instanceof Error ? error.message : 'Collection introuvable' });
+            }
+        },
+
+        getBuckets: async function (request: FastifyRequest<{Params: CollectionParams}>, reply: FastifyReply) {
+            try {
+                return getMapOrThrow(request.params.collection).getBucketsSnapshot();
+            } catch (error) {
+                return reply.code(404).send({ error: error instanceof Error ? error.message : 'Collection introuvable' });
+            }
+        },
+
+        getOne: async function (request: FastifyRequest<{Params: KeyParams}>, reply: FastifyReply) {
+            try {
+                const value = getMapOrThrow(request.params.collection).getKeyValue(request.params.key);
+                if (value === null) {
+                    return reply.code(404).send({ error: `Key "${request.params.key}" not found` });
+                }
+                return { key: request.params.key, value };
+            } catch (error) {
+                return reply.code(404).send({ error: error instanceof Error ? error.message : 'Collection introuvable' });
+            }
+        },
+
+        create: async function (request: FastifyRequest<{Params: CollectionParams, Body: CreateBody}>, reply: FastifyReply) {
+            const { key, value } = request.body;
+            if (!key) return reply.code(400).send({error: 'Key is required'});
+            
+            try {
+                await aggregator.insert(request.params.collection, {key, value});
+                return reply.code(201).send({key, value});
+            } catch (error) {
+                return reply.code(409).send({error: error instanceof Error ? error.message : 'Insertion failed'});
             }
         },
 
         update: async function (request: FastifyRequest<{Params: KeyParams, Body: UpdateBody}>, reply: FastifyReply) {
-            const updated = await hashmap.updateKeyValue(request.params.key, request.body.value)
-            
-            if (!updated) {
-                return reply.code(404).send({error: `Key "${request.params.key}" not found`})
+            try {
+                const updated = await aggregator.update(request.params.collection, request.params.key, request.body.value);
+                if (!updated) {
+                    return reply.code(404).send({error: `Key "${request.params.key}" not found`});
+                }
+                return { key: request.params.key, value: request.body.value };
+            } catch (error) {
+                return reply.code(404).send({ error: error instanceof Error ? error.message : 'Collection introuvable' });
             }
-            return { key: request.params.key, value: request.body.value}
         },
 
         remove: async function (request: FastifyRequest<{ Params: KeyParams }>, reply: FastifyReply) {
-            const deleted = await hashmap.deleteKey(request.params.key)
-
-            if (!deleted) {
-                return reply.code(404).send({error: `Key "${request.params.key}" not found`})
+            try {
+                const deleted = await aggregator.delete(request.params.collection, request.params.key);
+                if (!deleted) {
+                    return reply.code(404).send({error: `Key "${request.params.key}" not found`});
+                }
+                return { deleted: true, key: request.params.key };
+            } catch (error) {
+                return reply.code(404).send({ error: error instanceof Error ? error.message : 'Collection introuvable' });
             }
-            return { deleted: true, key: request.params.key}
         },
     }
 }

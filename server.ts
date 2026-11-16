@@ -4,7 +4,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import fastifyStatic from '@fastify/static';
 
-import HashMap from './src/services/hashmap.service';
+import Aggregator from './src/services/agregator.service';
 import DataStorage from './src/services/data-storage.service';
 import DataSeeder from './src/services/data-seed-storage.service';
 import InsertionWorker from './src/worker/insertion.worker';
@@ -23,13 +23,15 @@ async function main() {
         index: 'index.html'
     });
 
-    let insertionWorker = new InsertionWorker();
-    let dataSeeder = new DataSeeder();
-    const cache = new HashMap<string, string>();
-    
-    await cache.onStart();
+    // bloc d'initialisation  
 
-    const hashMapController = MyHashMapController(cache);
+    const dataSeeder = new DataSeeder();
+    const aggregator = new Aggregator<string, any>();
+    
+    const insertionWorker = new InsertionWorker(aggregator, dataSeeder);
+    const hashMapController = MyHashMapController(aggregator);
+
+    await aggregator.loadCollectionFromFile('cache');
 
     fastify.get('/UI', (request, reply) => {
         reply.redirect('/UI/');
@@ -43,12 +45,22 @@ async function main() {
         return { status: 'OK' };
     });
 
-    fastify.get('/buckets', hashMapController.getBuckets);
-    fastify.get('/keys', hashMapController.getAll);
-    fastify.get('/keys/:key', hashMapController.getOne);
-    fastify.post('/keys', hashMapController.create);
-    fastify.put('/keys/:key', hashMapController.update);
-    fastify.delete('/keys/:key', hashMapController.remove);
+    fastify.get('/api/:collection/buckets', hashMapController.getBuckets);
+    fastify.get('/api/:collection/keys', hashMapController.getAll);
+    fastify.get('/api/:collection/keys/:key', hashMapController.getOne);
+    fastify.post('/api/:collection/keys', hashMapController.create);
+    fastify.put('/api/:collection/keys/:key', hashMapController.update);
+    fastify.delete('/api/:collection/keys/:key', hashMapController.remove);
+
+    fastify.post('/api/collections', async (request, reply) => {
+        const { name, isPersistent } = request.body as { name: string, isPersistent: boolean };
+        try {
+            aggregator.createCollection(name, isPersistent);
+            return { success: true, message: `Collection [${name}] initialisée avec succès.` };
+        } catch (error) {
+            return reply.code(400).send({ error: error instanceof Error ? error.message : "Erreur création" });
+        }
+    });
 
     fastify.get('/api/files', async (request, reply) => {
         let storage = new DataStorage();
@@ -73,23 +85,16 @@ async function main() {
         return { success: true };
     });
 
-    fastify.post('/api/files', async (request, reply) => {
-        const { filename } = request.body as { filename: string };
-        const dataDir = path.join(process.cwd(), 'data');
-        const filePath = path.join(dataDir, filename);
-        await fs.mkdir(dataDir, { recursive: true });
-        await fs.writeFile(filePath, JSON.stringify(Array(8).fill(null)), "utf-8");
-        return { success: true };
-    });
-
     fastify.post('/api/insert', async (request, reply) => {
         const { filename, key, value } = request.body as { filename: string, key: string, value: any };
-        let map = new HashMap<string, any>();
-        const targetFilePath = path.join(process.cwd(), 'data', filename);
         
-        map.setStorageFile(targetFilePath);    
-        await map.onStart(); 
-        await map.insert({ key, value });
+        try {
+            aggregator.getCollection(filename);
+        } catch {
+            await aggregator.loadCollectionFromFile(filename);
+        }
+        
+        await aggregator.insert(filename, { key, value });
         return { success: true };
     });
 
@@ -100,14 +105,12 @@ async function main() {
         dataSeeder.selectDataFile("init.json");
         const result = await dataSeeder.seedFile(numberOfInsertion);
 
-        if(result) return { success: true };
-        else return { success: false }; 
+        return { success: result };
     });
 
     fastify.get('/seed', async function (request, reply) {
         try {
             const result = await insertionWorker.processSeeding();
-            
             if (result.success) {
                 return { success: true, message: `${result.count} entrées insérées avec succès.` };
             } else {
