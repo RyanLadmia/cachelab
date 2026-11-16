@@ -118,4 +118,17 @@ export const api = {
   runSeed() {
     return request("/seed");
   },
+
+  runLoadTest({ entries, connections, duration }) {
+    return request("/api/load-test", {
+      method: "POST",
+      body: JSON.stringify({ entries, connections, duration }),
+    });
+  },
+
+  clearMemory() {
+    return request("/api/memory", {
+      method: "DELETE",
+    });
+  },
 };

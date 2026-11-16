@@ -77,5 +77,10 @@ export function MyHashMapController(aggregator: Aggregator<string, any>) {
                 return reply.code(404).send({ error: error instanceof Error ? error.message : 'Collection introuvable' });
             }
         },
+
+        clear: async function (_request: FastifyRequest, reply: FastifyReply) {
+            await hashmap.clearAll()
+            return reply.code(200).send({ cleared: true })
+        },
     }
 }

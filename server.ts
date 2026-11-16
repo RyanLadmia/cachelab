@@ -1,6 +1,5 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import { promises as fs } from 'fs';
 import path from 'path';
 import fastifyStatic from '@fastify/static';
 
@@ -8,7 +7,11 @@ import Aggregator from './src/services/agregator.service';
 import DataStorage from './src/services/data-storage.service';
 import DataSeeder from './src/services/data-seed-storage.service';
 import InsertionWorker from './src/worker/insertion.worker';
-import { MyHashMapController } from './src/controllers/hashmap-controllers';
+import LoadTestService from './src/services/load-test.service';
+import { MyHashMapController } from './src/controllers/hashmap.controllers';
+import { LoadTestController } from './src/controllers/load-test.controller';
+import { DataSeedController } from './src/controllers/data-seed.controller';
+import { DataStorageController } from './src/controllers/data-storage.controller';
 
 const fastify = Fastify({
     logger: true
@@ -23,6 +26,7 @@ async function main() {
         index: 'index.html'
     });
 
+<<<<<<< HEAD
     // bloc d'initialisation  
 
     const dataSeeder = new DataSeeder();
@@ -32,6 +36,20 @@ async function main() {
     const hashMapController = MyHashMapController(aggregator);
 
     await aggregator.loadCollectionFromFile('cache');
+=======
+    let insertionWorker = new InsertionWorker();
+    let dataSeeder = new DataSeeder();
+    const storage = new DataStorage();
+    const cache = new HashMap<string, string>();
+    
+    await cache.onStart();
+
+    const hashMapController = MyHashMapController(cache);
+    const loadTestService = new LoadTestService(cache);
+    const loadTestController = LoadTestController(loadTestService);
+    const dataSeedController = DataSeedController(dataSeeder, insertionWorker);
+    const dataStorageController = DataStorageController(storage);
+>>>>>>> origin/UI
 
     fastify.get('/UI', (request, reply) => {
         reply.redirect('/UI/');
@@ -45,6 +63,7 @@ async function main() {
         return { status: 'OK' };
     });
 
+<<<<<<< HEAD
     fastify.get('/api/:collection/buckets', hashMapController.getBuckets);
     fastify.get('/api/:collection/keys', hashMapController.getAll);
     fastify.get('/api/:collection/keys/:key', hashMapController.getOne);
@@ -61,23 +80,26 @@ async function main() {
             return reply.code(400).send({ error: error instanceof Error ? error.message : "Erreur création" });
         }
     });
+=======
+    fastify.get('/buckets', hashMapController.getBuckets);
+    fastify.get('/keys', hashMapController.getAll);
+    fastify.get('/keys/:key', hashMapController.getOne);
+    fastify.post('/keys', hashMapController.create);
+    fastify.put('/keys/:key', hashMapController.update);
+    fastify.delete('/keys/:key', hashMapController.remove);
+    fastify.delete('/api/memory', hashMapController.clear);
+>>>>>>> origin/UI
 
-    fastify.get('/api/files', async (request, reply) => {
-        let storage = new DataStorage();
-        return await storage.listStore();
-    });
+    fastify.get('/api/files', dataStorageController.list);
+    fastify.get('/api/files/:name', dataStorageController.getOne);
+    fastify.delete('/api/files/:name', dataStorageController.remove);
+    fastify.post('/api/files', dataStorageController.create);
+    fastify.post('/api/insert', dataStorageController.insert);
 
-    fastify.get('/api/files/:name', async (request, reply) => {
-        const { name } = request.params as { name: string };
-        const filePath = path.join(process.cwd(), 'data', name);
-        try {
-            const fileContent = await fs.readFile(filePath, 'utf-8');
-            return JSON.parse(fileContent || "[]");
-        } catch (error) {
-            return reply.code(404).send({ error: "Fichier introuvable" });
-        }
-    });
+    fastify.get('/data-seeder', dataSeedController.seedFile);
+    fastify.get('/seed', dataSeedController.processSeed);
 
+<<<<<<< HEAD
     fastify.delete('/api/files/:name', async (request, reply) => {
         const { name } = request.params as { name: string };
         let storage = new DataStorage();
@@ -121,6 +143,9 @@ async function main() {
             return reply.code(500).send({ success: false, error: "Erreur serveur" });
         }
     });
+=======
+    fastify.post('/api/load-test', loadTestController.run);
+>>>>>>> origin/UI
 
     await fastify.listen({ port: 3001, host: '0.0.0.0' });
     fastify.log.info(`Serveur lancé sur http://127.0.0.1:3001`);

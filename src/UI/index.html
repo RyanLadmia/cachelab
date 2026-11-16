@@ -38,8 +38,14 @@
           <button class="nav__link" type="button" data-open-modal="seed">
             Seed
           </button>
+          <button class="nav__link" type="button" data-open-modal="loadtest">
+            Charge
+          </button>
           <button id="live-btn" class="nav__link" type="button">
             Mémoire
+          </button>
+          <button id="clear-memory-btn" class="nav__link" type="button">
+            Vider RAM
           </button>
           <button id="refresh-btn" class="nav__link" type="button">
             Actualiser
@@ -85,6 +91,41 @@
         <div class="metric">
           <span class="metric__label">Collisions</span>
           <span id="stat-collisions" class="metric__value">—</span>
+        </div>
+      </div>
+
+      <div id="loadtest-metrics" class="metrics metrics--loadtest" aria-label="Métriques du dernier stress test" hidden>
+        <div class="metric">
+          <span class="metric__label">RPS</span>
+          <span id="lt-rps" class="metric__value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric__label">Lat. p50</span>
+          <span id="lt-p50" class="metric__value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric__label">Lat. p99</span>
+          <span id="lt-p99" class="metric__value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric__label">Erreurs</span>
+          <span id="lt-errors" class="metric__value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric__label">Timeouts</span>
+          <span id="lt-timeouts" class="metric__value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric__label">Seedées</span>
+          <span id="lt-seeded" class="metric__value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric__label">CPU</span>
+          <span id="lt-cpu" class="metric__value">—</span>
+        </div>
+        <div class="metric">
+          <span class="metric__label">RAM</span>
+          <span id="lt-ram" class="metric__value">—</span>
         </div>
       </div>
 
@@ -307,6 +348,73 @@
       </div>
     </div>
 
+    <div id="modal-loadtest" class="modal" role="dialog" aria-modal="true" aria-labelledby="loadtest-title" hidden>
+      <div class="modal__backdrop" data-close-modal></div>
+      <div class="modal__dialog">
+        <div class="modal__header">
+          <div>
+            <h2 id="loadtest-title" class="modal__title">Charge</h2>
+            <p class="modal__subtitle">
+              Seed volume dans la mémoire live, puis barrage HTTP serveur (`POST /api/load-test`).
+            </p>
+          </div>
+          <button class="modal__close" type="button" data-close-modal aria-label="Fermer">×</button>
+        </div>
+        <form id="loadtest-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="lt-entries">Entrées à insérer</label>
+            <input
+              id="lt-entries"
+              class="field__control field__control--mono"
+              name="entries"
+              type="number"
+              min="0"
+              max="50000"
+              step="1"
+              value="1000"
+              required
+            />
+            <p class="field__hint">0 à 50000 — insérées dans la hashmap live avant le barrage.</p>
+          </div>
+          <div class="field">
+            <label class="field__label" for="lt-connections">Clients concurrents</label>
+            <input
+              id="lt-connections"
+              class="field__control field__control--mono"
+              name="connections"
+              type="number"
+              min="1"
+              max="500"
+              step="1"
+              value="50"
+              required
+            />
+            <p class="field__hint">1 à 500 connexions simultanées (autocannon).</p>
+          </div>
+          <div class="field">
+            <label class="field__label" for="lt-duration">Durée (secondes)</label>
+            <input
+              id="lt-duration"
+              class="field__control field__control--mono"
+              name="duration"
+              type="number"
+              min="1"
+              max="60"
+              step="1"
+              value="10"
+              required
+            />
+            <p class="field__hint">1 à 60 s par endpoint (GET /keys puis GET /keys/:key).</p>
+          </div>
+          <div id="loadtest-result" class="result-block" hidden></div>
+          <div class="form-actions">
+            <button id="loadtest-submit" class="btn btn--accent" type="submit">Lancer le stress test</button>
+            <button class="btn btn--ghost" type="button" data-close-modal>Annuler</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div id="modal-preview" class="modal" role="dialog" aria-modal="true" aria-labelledby="preview-title" hidden>
       <div class="modal__backdrop" data-close-modal></div>
       <div class="modal__dialog modal__dialog--wide">
@@ -321,6 +429,6 @@
       </div>
     </div>
 
-    <script type="module" src="./assets/js/pages/home.js"></script>
+    <script type="module" src="./assets/js/pages/home.js?v=clear-ram-1"></script>
   </body>
 </html>

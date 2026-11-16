@@ -13,6 +13,7 @@ const viewBadge = document.getElementById("view-badge");
 const modeHint = document.getElementById("mode-hint");
 const refreshBtn = document.getElementById("refresh-btn");
 const liveBtn = document.getElementById("live-btn");
+const clearMemoryBtn = document.getElementById("clear-memory-btn");
 const filesList = document.getElementById("files-list");
 const filesCount = document.getElementById("files-count");
 const createFileForm = document.getElementById("create-file-form");
@@ -39,12 +40,14 @@ const modalCreate = document.getElementById("modal-create");
 const modalEdit = document.getElementById("modal-edit");
 const modalLookup = document.getElementById("modal-lookup");
 const modalSeed = document.getElementById("modal-seed");
+const modalLoadTest = document.getElementById("modal-loadtest");
 const modalPreview = document.getElementById("modal-preview");
 const createForm = document.getElementById("create-form");
 const createSubtitle = document.getElementById("create-subtitle");
 const editForm = document.getElementById("edit-form");
 const lookupForm = document.getElementById("lookup-form");
 const seedForm = document.getElementById("seed-form");
+const loadTestForm = document.getElementById("loadtest-form");
 const createKey = document.getElementById("create-key");
 const createValue = document.getElementById("create-value");
 const createSubmit = document.getElementById("create-submit");
@@ -57,6 +60,20 @@ const lookupResult = document.getElementById("lookup-result");
 const seedCount = document.getElementById("seed-count");
 const seedGenerate = document.getElementById("seed-generate");
 const seedRun = document.getElementById("seed-run");
+const ltEntries = document.getElementById("lt-entries");
+const ltConnections = document.getElementById("lt-connections");
+const ltDuration = document.getElementById("lt-duration");
+const loadTestSubmit = document.getElementById("loadtest-submit");
+const loadTestResult = document.getElementById("loadtest-result");
+const loadTestMetrics = document.getElementById("loadtest-metrics");
+const ltRps = document.getElementById("lt-rps");
+const ltP50 = document.getElementById("lt-p50");
+const ltP99 = document.getElementById("lt-p99");
+const ltErrors = document.getElementById("lt-errors");
+const ltTimeouts = document.getElementById("lt-timeouts");
+const ltSeeded = document.getElementById("lt-seeded");
+const ltCpu = document.getElementById("lt-cpu");
+const ltRam = document.getElementById("lt-ram");
 const previewSubtitle = document.getElementById("preview-subtitle");
 const previewContent = document.getElementById("preview-content");
 
@@ -121,6 +138,11 @@ function keepScroll(run) {
   restore();
   requestAnimationFrame(restore);
   return result;
+}
+
+function formatMs(value) {
+  if (!Number.isFinite(value)) return "—";
+  return `${Math.round(value * 10) / 10} ms`;
 }
 
 // ============================================================================
@@ -283,6 +305,55 @@ function paintSnapshot(snapshot, { resetAnim = false } = {}) {
     .join("");
 
   previousSnapshot = snapshot;
+}
+
+function renderLoadTestReport(report) {
+  const rps = Math.round(report.requests?.average ?? 0);
+  const cpu = report.system?.cpuPercent;
+  const ramAfter = report.system?.memory?.after?.rssMb;
+  const ramDelta = report.system?.memory?.delta?.rssMb;
+  const cpuEl = document.getElementById("lt-cpu") || ltCpu;
+  const ramEl = document.getElementById("lt-ram") || ltRam;
+
+  if (ltRps) ltRps.textContent = String(rps);
+  if (ltP50) ltP50.textContent = formatMs(report.latency?.p50);
+  if (ltP99) ltP99.textContent = formatMs(report.latency?.p99);
+  if (ltErrors) ltErrors.textContent = String(report.errors ?? 0);
+  if (ltTimeouts) ltTimeouts.textContent = String(report.timeouts ?? 0);
+  if (ltSeeded) ltSeeded.textContent = String(report.seeded ?? 0);
+  if (cpuEl) {
+    cpuEl.textContent = Number.isFinite(cpu) ? `${cpu} %` : "—";
+  }
+  if (ramEl) {
+    ramEl.textContent = Number.isFinite(ramAfter)
+      ? `${ramAfter} Mo${Number.isFinite(ramDelta) ? ` (${ramDelta >= 0 ? "+" : ""}${ramDelta})` : ""}`
+      : "—";
+  }
+  if (loadTestMetrics) loadTestMetrics.hidden = false;
+
+  loadTestResult.hidden = false;
+  loadTestResult.innerHTML = `
+    <div>
+      <div class="result-block__label">Requêtes totales</div>
+      <div class="result-block__value">${escapeHtml(String(report.requests?.total ?? 0))}</div>
+    </div>
+    <div>
+      <div class="result-block__label">Latence moyenne</div>
+      <div class="result-block__value">${escapeHtml(formatMs(report.latency?.average))}</div>
+    </div>
+    <div>
+      <div class="result-block__label">CPU (process Node)</div>
+      <div class="result-block__value">${escapeHtml(Number.isFinite(cpu) ? `${cpu} %` : "—")} · user ${escapeHtml(String(report.system?.cpuUserMs ?? "—"))} ms · system ${escapeHtml(String(report.system?.cpuSystemMs ?? "—"))} ms</div>
+    </div>
+    <div>
+      <div class="result-block__label">RAM (RSS / heap)</div>
+      <div class="result-block__value">RSS ${escapeHtml(String(report.system?.memory?.after?.rssMb ?? "—"))} Mo · heap ${escapeHtml(String(report.system?.memory?.after?.heapUsedMb ?? "—"))}/${escapeHtml(String(report.system?.memory?.after?.heapTotalMb ?? "—"))} Mo · Δ RSS ${escapeHtml(String(report.system?.memory?.delta?.rssMb ?? "—"))} Mo</div>
+    </div>
+    <div>
+      <div class="result-block__label">Hashmap après test</div>
+      <div class="result-block__value">load ${escapeHtml(String(report.hashmap?.load ?? "—"))} · collisions ${escapeHtml(String(report.hashmap?.collisions ?? "—"))} · taille ${escapeHtml(String(report.hashmap?.length ?? "—"))}</div>
+    </div>
+  `;
 }
 
 // ============================================================================
@@ -477,7 +548,15 @@ function openLookupModal(prefill = "") {
 }
 
 function openSeedModal() {
-  openModal(modalSeed, seedCount);
+  if (modalSeed) openModal(modalSeed, seedCount);
+}
+
+function openLoadTestModal() {
+  if (loadTestResult) {
+    loadTestResult.hidden = true;
+    loadTestResult.innerHTML = "";
+  }
+  if (modalLoadTest) openModal(modalLoadTest, ltEntries);
 }
 
 async function openEditForKey(key) {
@@ -534,6 +613,8 @@ document.querySelectorAll("[data-open-modal]").forEach((button) => {
        newCollectionForm.reset();
        openModal(modalNewCollection, collectionNameInput);
     }
+    if (name === "seed") openSeedModal();
+    if (name === "loadtest") openLoadTestModal();
   });
 });
 
@@ -682,6 +763,97 @@ lookupForm.addEventListener("submit", async (event) => {
   }
 });
 
+if (seedForm) {
+  seedForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const count = Number(seedCount.value);
+    seedGenerate.disabled = true;
+    try {
+      const result = await api.generateSeed(count);
+      if (result?.success === false) throw new Error("Génération du seed échouée");
+      showToast(`Seed généré (${count} entrées)`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      seedGenerate.disabled = false;
+    }
+  });
+}
+
+if (seedRun) {
+  seedRun.addEventListener("click", async () => {
+    seedRun.disabled = true;
+    try {
+      const result = await api.runSeed();
+      showToast(result.message || "Seed terminé", result.success ? "success" : "error");
+      rememberFile("cache.json");
+      if (viewMode === "live") await loadLiveBuckets({ resetAnim: true });
+      else if (selectedFile === "cache.json") {
+        await loadFileBuckets("cache.json", { resetAnim: true });
+      }
+      await loadFiles();
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      seedRun.disabled = false;
+    }
+  });
+}
+
+if (loadTestForm) {
+  loadTestForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const entries = Number(ltEntries.value);
+    const connections = Number(ltConnections.value);
+    const duration = Number(ltDuration.value);
+
+    if (!Number.isFinite(entries) || entries < 0 || entries > 50000) {
+      showToast("Entrées : 0 à 50000", "error");
+      return;
+    }
+    if (!Number.isFinite(connections) || connections < 1 || connections > 500) {
+      showToast("Clients : 1 à 500", "error");
+      return;
+    }
+    if (!Number.isFinite(duration) || duration < 1 || duration > 60) {
+      showToast("Durée : 1 à 60 s", "error");
+      return;
+    }
+
+    loadTestSubmit.disabled = true;
+    loadTestResult.hidden = false;
+    loadTestResult.innerHTML = `
+      <div class="result-block__label">Statut</div>
+      <div class="result-block__value">Test en cours… (volume puis barrage HTTP)</div>
+    `;
+    showToast("Stress test démarré côté serveur", "info");
+
+    try {
+      const report = await api.runLoadTest({
+        entries: Math.floor(entries),
+        connections: Math.floor(connections),
+        duration: Math.floor(duration),
+      });
+      renderLoadTestReport(report);
+      showToast(
+        `Test terminé — ~${Math.round(report.requests?.average ?? 0)} req/s`,
+        "success"
+      );
+      if (viewMode === "live") await loadLiveBuckets({ resetAnim: true });
+      else await switchToLive();
+    } catch (error) {
+      loadTestResult.hidden = false;
+      loadTestResult.innerHTML = `
+        <div class="result-block__label">Erreur</div>
+        <div class="result-block__value">${escapeHtml(error.message)}</div>
+      `;
+      showToast(error.message, "error");
+    } finally {
+      loadTestSubmit.disabled = false;
+    }
+  });
+}
+
 // ============================================================================
 // DELEGATION D'EVENEMENTS (Clics dynamiques)
 // ============================================================================
@@ -762,20 +934,43 @@ if (liveBtn) {
   });
 }
 
-refreshBtn.addEventListener("click", async () => {
-  refreshBtn.disabled = true;
-  await checkHealth();
-  if (filesList) await loadFiles();
-  
-  if (viewMode === "file" && selectedFile) {
-    await loadFileBuckets(selectedFile, { resetAnim: false });
-  } else {
-    await loadLiveBuckets();
-  }
-  
-  refreshBtn.disabled = false;
-  showToast("Vue actualisée", "info");
-});
+if (clearMemoryBtn) {
+  clearMemoryBtn.addEventListener("click", async () => {
+    const confirmed = window.confirm(
+      "Vider toute la hashmap en mémoire (et réécrire cache.json vide) ?"
+    );
+    if (!confirmed) return;
+
+    clearMemoryBtn.disabled = true;
+    try {
+      await api.clearMemory();
+      showToast("Mémoire vidée", "success");
+      if (viewMode === "live") await loadLiveBuckets({ resetAnim: true });
+      else await switchToLive();
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      clearMemoryBtn.disabled = false;
+    }
+  });
+}
+
+if (refreshBtn) {
+  refreshBtn.addEventListener("click", async () => {
+    refreshBtn.disabled = true;
+    await checkHealth();
+    if (filesList) await loadFiles();
+    
+    if (viewMode === "file" && selectedFile) {
+      await loadFileBuckets(selectedFile, { resetAnim: false });
+    } else {
+      await loadLiveBuckets();
+    }
+    
+    refreshBtn.disabled = false;
+    showToast("Vue actualisée", "info");
+  });
+}
 
 // Initialisation
 updateViewChrome();

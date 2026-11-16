@@ -70,6 +70,13 @@ export default class HashMap<K extends PropertyKey, V> {
         this.currentLoad++;
     }
 
+    // Nouvelle méthode intégrée pour le mode purement RAM (l'Agrégateur gérera la sauvegarde)
+    public clearAll(): void {
+        this.currentLength = this.BASE_LENGTH;
+        this.collection = new Array(this.BASE_LENGTH).fill(null);
+        this.currentLoad = 0;
+    }
+
     private hashEntry(newValue: HashmapValue<K, V | null>, targetArray: Bucket<K, V>[]): void {
        const index = this.getIndex(newValue.key, targetArray.length);
        this.pushOrCollide(index, newValue, targetArray);
