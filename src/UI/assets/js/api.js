@@ -69,4 +69,55 @@ export const api = {
       method: "DELETE",
     });
   },
+
+  listFiles() {
+    return request("/api/files");
+  },
+
+  getFile(name) {
+    return request(`/api/files/${encodeURIComponent(name)}`);
+  },
+
+  createFile(filename) {
+    return request("/api/files", {
+      method: "POST",
+      body: JSON.stringify({ filename }),
+    });
+  },
+
+  deleteFile(name) {
+    return request(`/api/files/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
+  },
+
+  insertIntoFile(filename, key, value) {
+    return request("/api/insert", {
+      method: "POST",
+      body: JSON.stringify({ filename, key, value }),
+    });
+  },
+
+  generateSeed(numberOfInsertion) {
+    return request(
+      `/data-seeder?numberOfInsertion=${encodeURIComponent(numberOfInsertion)}`
+    );
+  },
+
+  runSeed() {
+    return request("/seed");
+  },
+
+  runLoadTest({ entries, connections, duration }) {
+    return request("/api/load-test", {
+      method: "POST",
+      body: JSON.stringify({ entries, connections, duration }),
+    });
+  },
+
+  clearMemory() {
+    return request("/api/memory", {
+      method: "DELETE",
+    });
+  },
 };

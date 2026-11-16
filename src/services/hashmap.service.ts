@@ -130,6 +130,15 @@ export default class HashMap<K extends PropertyKey, V> {
         this.unsavedInsertions = 0; 
     }
 
+    async clearAll(): Promise<void> {
+        this.currentLength = this.BASE_LENGTH;
+        this.collection = new Array(this.BASE_LENGTH).fill(null);
+        this.currentLoad = 0;
+        this.unsavedInsertions = 0;
+        this.computeLoadFactor();
+        await this.persist();
+    }
+
     hashEntry(newValue: HashmapValue<K, V | null>, targetArray: Bucket<K, V>[]): void {
        const index = this.getIndex(newValue.key, targetArray.length);
        this.pushOrCollide(index, newValue, targetArray);

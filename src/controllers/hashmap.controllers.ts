@@ -55,5 +55,10 @@ export function MyHashMapController(hashmap: HashMap<string, string>) {
             }
             return { deleted: true, key: request.params.key}
         },
+
+        clear: async function (_request: FastifyRequest, reply: FastifyReply) {
+            await hashmap.clearAll()
+            return reply.code(200).send({ cleared: true })
+        },
     }
 }
