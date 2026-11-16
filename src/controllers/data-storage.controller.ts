@@ -8,7 +8,7 @@ type NameParams = { name: string };
 type CreateFileBody = { filename: string };
 type InsertBody = { filename: string; key: string; value: any };
 
-export function DataStorageController(storage: DataStorage, aggregator: Aggregator<string, any>) {
+export function DataStorageController(storage: DataStorage, aggregator: Aggregator<string, string>) {
     return {
         list: async function (request: FastifyRequest, reply: FastifyReply) {
             return await storage.listStore();

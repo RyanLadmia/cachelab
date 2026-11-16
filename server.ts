@@ -28,7 +28,7 @@ async function main() {
 
     // --- INITIALISATION DES SERVICES (Architecture Aggregator) ---
     const dataSeeder = new DataSeeder();
-    const aggregator = new Aggregator<string, any>();
+    const aggregator = new Aggregator<string, string>();
     const storage = new DataStorage();
     
     const insertionWorker = new InsertionWorker(aggregator, dataSeeder);

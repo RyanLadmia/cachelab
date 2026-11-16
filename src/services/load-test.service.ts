@@ -12,7 +12,7 @@ export class LoadTestBusyError extends Error {
 export default class LoadTestService {
     private running = false;
 
-    constructor(private readonly aggregator: Aggregator<string, any>) {}
+    constructor(private readonly aggregator: Aggregator<string, string>) {}
 
     isRunning(): boolean {
         return this.running;
@@ -30,9 +30,10 @@ export default class LoadTestService {
         let sampleKey: string | null = null;
         let seeded = 0;
 
+        // Metric before tests
         const memoryBefore = this.readMemoryMb();
         const cpuStart = process.cpuUsage();
-        const wallStart = process.hrtime.bigint();
+        const wallStart = process.hrtime.bigint(); // nonosecs
 
         try {
             let collection;
@@ -58,6 +59,7 @@ export default class LoadTestService {
                 sampleKey = keys.length > 0 ? String(keys[0]) : null;
             }
 
+            // test get allKeys from a collection
             const listResult = await this.fireAutocannon({
                 url: `${baseUrl}/api/${encodeURIComponent(collectionName)}/keys`,
                 connections: params.connections,
@@ -116,9 +118,10 @@ export default class LoadTestService {
                         after: memoryAfter,
                         delta: {
                             rssMb: Math.round((memoryAfter.rssMb - memoryBefore.rssMb) * 10) / 10,
+                            // heap ram running
                             heapUsedMb:
                                 Math.round((memoryAfter.heapUsedMb - memoryBefore.heapUsedMb) * 10) /
-                                10,
+                                10, // To one decimal
                         },
                     },
                 },

@@ -347,7 +347,7 @@ function renderLoadTestReport(report) {
     </div>
     <div>
       <div class="result-block__label">RAM (RSS / heap)</div>
-      <div class="result-block__value">RSS ${escapeHtml(String(report.system?.memory?.after?.rssMb ?? "—"))} Mo · heap ${escapeHtml(String(report.system?.memory?.after?.heapUsedMb ?? "—"))}/${escapeHtml(String(report.system?.memory?.after?.heapTotalMb ?? "—"))} Mo · Δ RSS ${escapeHtml(String(report.system?.memory?.delta?.rssMb ?? "—"))} Mo</div>
+      <div class="result-block__value">RSS ${escapeHtml(String(report.system?.memory?.after?.rssMb ?? "—"))} Mo · heap ${escapeHtml(String(report.system?.memory?.after?.heapUsedMb ?? "—"))}/${escapeHtml(String(report.system?.memory?.after?.heapTotalMb ?? "—"))} Mo · / RSS ${escapeHtml(String(report.system?.memory?.delta?.rssMb ?? "—"))} Mo</div>
     </div>
     <div>
       <div class="result-block__label">Hashmap après test</div>

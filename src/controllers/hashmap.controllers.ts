@@ -7,7 +7,7 @@ type CreateBody = { key: string, value: string }
 type UpdateBody = { value: string }
 
 // permet le CRUD de l'agrégateur 
-export function MyHashMapController(aggregator: Aggregator<string, any>) {
+export function MyHashMapController(aggregator: Aggregator<string, string>) {
     
     const getMapOrThrow = (collectionName: string) => {
         return aggregator.getCollection(collectionName);

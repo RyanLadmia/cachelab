@@ -5,9 +5,9 @@ import HashMap from "../services/hashmap.service";
 export default class InsertionWorker {
 
     private dataSeeder: DataSeeder;
-    private aggregator: Aggregator<string, any>;
+    private aggregator: Aggregator<string, string>;
 
-    constructor(aggregator: Aggregator<string, any>, dataSeeder: DataSeeder) {
+    constructor(aggregator: Aggregator<string, string>, dataSeeder: DataSeeder) {
         this.aggregator = aggregator;
         this.dataSeeder = dataSeeder; 
     }
