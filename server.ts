@@ -26,30 +26,23 @@ async function main() {
         index: 'index.html'
     });
 
-<<<<<<< HEAD
-    // bloc d'initialisation  
-
+    // --- INITIALISATION DES SERVICES (Architecture Aggregator) ---
     const dataSeeder = new DataSeeder();
     const aggregator = new Aggregator<string, any>();
+    const storage = new DataStorage();
     
     const insertionWorker = new InsertionWorker(aggregator, dataSeeder);
-    const hashMapController = MyHashMapController(aggregator);
-
-    await aggregator.loadCollectionFromFile('cache');
-=======
-    let insertionWorker = new InsertionWorker();
-    let dataSeeder = new DataSeeder();
-    const storage = new DataStorage();
-    const cache = new HashMap<string, string>();
     
-    await cache.onStart();
+    // Préchargement de la collection par défaut au démarrage
+    await aggregator.loadCollectionFromFile('cache');
 
-    const hashMapController = MyHashMapController(cache);
-    const loadTestService = new LoadTestService(cache);
+    // --- INITIALISATION DES CONTRÔLEURS ---
+    const hashMapController = MyHashMapController(aggregator);
+    // On passe l'agrégateur aux autres services/contrôleurs pour qu'ils partagent la même RAM
+    const loadTestService = new LoadTestService(aggregator);
     const loadTestController = LoadTestController(loadTestService);
     const dataSeedController = DataSeedController(dataSeeder, insertionWorker);
-    const dataStorageController = DataStorageController(storage);
->>>>>>> origin/UI
+    const dataStorageController = DataStorageController(storage, aggregator);
 
     fastify.get('/UI', (request, reply) => {
         reply.redirect('/UI/');
@@ -63,13 +56,17 @@ async function main() {
         return { status: 'OK' };
     });
 
-<<<<<<< HEAD
+    // --- ROUTES HASHMAP / AGGREGATOR (Dynamiques) ---
     fastify.get('/api/:collection/buckets', hashMapController.getBuckets);
     fastify.get('/api/:collection/keys', hashMapController.getAll);
     fastify.get('/api/:collection/keys/:key', hashMapController.getOne);
     fastify.post('/api/:collection/keys', hashMapController.create);
     fastify.put('/api/:collection/keys/:key', hashMapController.update);
     fastify.delete('/api/:collection/keys/:key', hashMapController.remove);
+    
+    // Route(s) de nettoyage mémoire issue de origin/UI
+    fastify.delete('/api/memory', hashMapController.clear);
+    fastify.delete('/api/:collection/memory', hashMapController.clear); // Version dynamique
 
     fastify.post('/api/collections', async (request, reply) => {
         const { name, isPersistent } = request.body as { name: string, isPersistent: boolean };
@@ -80,72 +77,20 @@ async function main() {
             return reply.code(400).send({ error: error instanceof Error ? error.message : "Erreur création" });
         }
     });
-=======
-    fastify.get('/buckets', hashMapController.getBuckets);
-    fastify.get('/keys', hashMapController.getAll);
-    fastify.get('/keys/:key', hashMapController.getOne);
-    fastify.post('/keys', hashMapController.create);
-    fastify.put('/keys/:key', hashMapController.update);
-    fastify.delete('/keys/:key', hashMapController.remove);
-    fastify.delete('/api/memory', hashMapController.clear);
->>>>>>> origin/UI
 
+    // --- ROUTES FICHIERS & INSERTION (Issues de origin/UI) ---
     fastify.get('/api/files', dataStorageController.list);
     fastify.get('/api/files/:name', dataStorageController.getOne);
     fastify.delete('/api/files/:name', dataStorageController.remove);
     fastify.post('/api/files', dataStorageController.create);
     fastify.post('/api/insert', dataStorageController.insert);
 
+    // --- ROUTES SEEDER (Issues de origin/UI) ---
     fastify.get('/data-seeder', dataSeedController.seedFile);
     fastify.get('/seed', dataSeedController.processSeed);
 
-<<<<<<< HEAD
-    fastify.delete('/api/files/:name', async (request, reply) => {
-        const { name } = request.params as { name: string };
-        let storage = new DataStorage();
-        await storage.deleteDataFile(name);
-        return { success: true };
-    });
-
-    fastify.post('/api/insert', async (request, reply) => {
-        const { filename, key, value } = request.body as { filename: string, key: string, value: any };
-        
-        try {
-            aggregator.getCollection(filename);
-        } catch {
-            await aggregator.loadCollectionFromFile(filename);
-        }
-        
-        await aggregator.insert(filename, { key, value });
-        return { success: true };
-    });
-
-    fastify.get('/data-seeder', async function (request, reply){
-        const query = request.query as { numberOfInsertion: string };
-        const numberOfInsertion = parseInt(query.numberOfInsertion, 10);
-
-        dataSeeder.selectDataFile("init.json");
-        const result = await dataSeeder.seedFile(numberOfInsertion);
-
-        return { success: result };
-    });
-
-    fastify.get('/seed', async function (request, reply) {
-        try {
-            const result = await insertionWorker.processSeeding();
-            if (result.success) {
-                return { success: true, message: `${result.count} entrées insérées avec succès.` };
-            } else {
-                return { success: false, message: "Rien n'a été inséré." };
-            }
-        } catch (error) {
-            console.error("Erreur fatale lors du seeding :", error);
-            return reply.code(500).send({ success: false, error: "Erreur serveur" });
-        }
-    });
-=======
+    // --- ROUTES LOAD TESTING (Issues de origin/UI) ---
     fastify.post('/api/load-test', loadTestController.run);
->>>>>>> origin/UI
 
     await fastify.listen({ port: 3001, host: '0.0.0.0' });
     fastify.log.info(`Serveur lancé sur http://127.0.0.1:3001`);

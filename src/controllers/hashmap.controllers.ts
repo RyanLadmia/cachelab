@@ -78,9 +78,19 @@ export function MyHashMapController(aggregator: Aggregator<string, any>) {
             }
         },
 
-        clear: async function (_request: FastifyRequest, reply: FastifyReply) {
-            await hashmap.clearAll()
-            return reply.code(200).send({ cleared: true })
-        },
+    clear: async function (request: FastifyRequest<{ Params: { collection?: string } }>, reply: FastifyReply) {
+                try {
+                    const collectionName = request.params.collection ?? "cache";
+                    const hashmap = aggregator.getCollection(collectionName);
+                    
+                    hashmap.clearAll();
+                    
+                    await aggregator.saveCollection(collectionName);
+
+                    return reply.code(200).send({ cleared: true, collection: collectionName });
+                } catch (error) {
+                    return reply.code(404).send({ error: error instanceof Error ? error.message : 'Collection introuvable' });
+                }
+            },
     }
 }

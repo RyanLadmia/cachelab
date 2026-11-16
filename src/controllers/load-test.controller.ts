@@ -5,6 +5,7 @@ type LoadTestBody = {
     entries?: number;
     connections?: number;
     duration?: number;
+    collection?: string;
 };
 
 export function LoadTestController(loadTestService: LoadTestService) {
@@ -17,6 +18,7 @@ export function LoadTestController(loadTestService: LoadTestService) {
             const entries = Number(body.entries);
             const connections = Number(body.connections);
             const duration = Number(body.duration);
+            const collection = body.collection ?? "cache";
 
             if (!Number.isFinite(entries) || entries < 0 || entries > 50000) {
                 return reply.code(400).send({ error: "entries doit être entre 0 et 50000" });
@@ -33,6 +35,7 @@ export function LoadTestController(loadTestService: LoadTestService) {
                     entries: Math.floor(entries),
                     connections: Math.floor(connections),
                     duration: Math.floor(duration),
+                    collection: collection,
                 });
                 return report;
             } catch (error) {
