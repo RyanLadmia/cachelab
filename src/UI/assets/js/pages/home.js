@@ -1,31 +1,23 @@
 import { api } from "../api.js";
+import { snapshotFromCollection } from "../buckets-from-file.js";
 import { escapeHtml, showToast } from "../common.js";
 
-// NOUVEAU: Gestion du state de la collection
-const collectionSelect = document.getElementById("collection-select");
-const activeCollectionBadge = document.getElementById("active-collection-badge");
-let activeCollection = "cache";
+const FILES_STORAGE_KEY = "cachelab.files";
+const DEFAULT_FILES = ["cache.json", "init.json"];
 
-// --- GESTION DE LA COLLECTION ACTIVE ---
-collectionSelect.addEventListener("change", async (e) => {
-  activeCollection = e.target.value;
-  activeCollectionBadge.textContent = activeCollection;
-  previousSnapshot = null; // On reset l'animation de diff
-  showToast(`Changement vers la collection : ${activeCollection}`, "info");
-  await loadBuckets();
-});
-
-// Nouveaux éléments modale collection
-const modalNewCollection = document.getElementById("modal-new-collection");
-const newCollectionForm = document.getElementById("new-collection-form");
-const collectionNameInput = document.getElementById("collection-name");
-const collectionPersistInput = document.getElementById("collection-persist");
-const collectionSubmit = document.getElementById("collection-submit");
-
+// --- DOM ELEMENTS : Fichiers & Vues ---
 const bucketsGrid = document.getElementById("buckets-grid");
 const bucketsMeta = document.getElementById("buckets-meta");
 const healthBadge = document.getElementById("health-badge");
+const viewBadge = document.getElementById("view-badge");
+const modeHint = document.getElementById("mode-hint");
 const refreshBtn = document.getElementById("refresh-btn");
+const liveBtn = document.getElementById("live-btn");
+const filesList = document.getElementById("files-list");
+const filesCount = document.getElementById("files-count");
+const createFileForm = document.getElementById("create-file-form");
+const createFileSubmit = document.getElementById("create-file-submit");
+const newFilename = document.getElementById("new-filename");
 const statLength = document.getElementById("stat-length");
 const statLoad = document.getElementById("stat-load");
 const statOccupied = document.getElementById("stat-occupied");
@@ -33,12 +25,26 @@ const statCollisions = document.getElementById("stat-collisions");
 const loadFill = document.getElementById("load-fill");
 const loadRatio = document.getElementById("load-ratio");
 
+// --- DOM ELEMENTS : Agrégateur & Collections ---
+const collectionSelect = document.getElementById("collection-select");
+const activeCollectionBadge = document.getElementById("active-collection-badge");
+const modalNewCollection = document.getElementById("modal-new-collection");
+const newCollectionForm = document.getElementById("new-collection-form");
+const collectionNameInput = document.getElementById("collection-name");
+const collectionPersistInput = document.getElementById("collection-persist");
+const collectionSubmit = document.getElementById("collection-submit");
+
+// --- DOM ELEMENTS : Modales & Formulaires ---
 const modalCreate = document.getElementById("modal-create");
 const modalEdit = document.getElementById("modal-edit");
 const modalLookup = document.getElementById("modal-lookup");
+const modalSeed = document.getElementById("modal-seed");
+const modalPreview = document.getElementById("modal-preview");
 const createForm = document.getElementById("create-form");
+const createSubtitle = document.getElementById("create-subtitle");
 const editForm = document.getElementById("edit-form");
 const lookupForm = document.getElementById("lookup-form");
+const seedForm = document.getElementById("seed-form");
 const createKey = document.getElementById("create-key");
 const createValue = document.getElementById("create-value");
 const createSubmit = document.getElementById("create-submit");
@@ -48,10 +54,43 @@ const editSubmit = document.getElementById("edit-submit");
 const lookupKey = document.getElementById("lookup-key");
 const lookupSubmit = document.getElementById("lookup-submit");
 const lookupResult = document.getElementById("lookup-result");
+const seedCount = document.getElementById("seed-count");
+const seedGenerate = document.getElementById("seed-generate");
+const seedRun = document.getElementById("seed-run");
+const previewSubtitle = document.getElementById("preview-subtitle");
+const previewContent = document.getElementById("preview-content");
 
+// --- ETAT GLOBAL ---
 let previousSnapshot = null;
 let scrollLockY = 0;
 let activeModal = null;
+let activeCollection = "cache";
+/** @type {'live' | 'file'} */
+let viewMode = "live";
+let selectedFile = null;
+
+// ============================================================================
+// UTILITAIRES & GESTION DES FICHIERS
+// ============================================================================
+
+function getKnownFiles() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FILES_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((name) => typeof name === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberFile(name) {
+  const next = new Set([...DEFAULT_FILES, ...getKnownFiles(), name].filter(Boolean));
+  localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify([...next]));
+}
+
+function forgetFile(name) {
+  const next = getKnownFiles().filter((item) => item !== name);
+  localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify(next));
+}
 
 function stateLabel(type) {
   if (type === "collision") return "Collision";
@@ -68,9 +107,7 @@ function bucketSignature(bucket) {
 
 function keepScroll(run) {
   const y = window.scrollY;
-  const restore = () => {
-    window.scrollTo(0, y);
-  };
+  const restore = () => window.scrollTo(0, y);
   const result = run();
 
   if (result && typeof result.then === "function") {
@@ -86,6 +123,10 @@ function keepScroll(run) {
   return result;
 }
 
+// ============================================================================
+// GESTION DES MODALES
+// ============================================================================
+
 function openModal(modal, focusEl) {
   if (activeModal && activeModal !== modal) closeModal(activeModal);
 
@@ -98,9 +139,7 @@ function openModal(modal, focusEl) {
   document.body.style.position = "fixed";
   document.body.style.width = "100%";
 
-  requestAnimationFrame(() => {
-    focusEl?.focus();
-  });
+  requestAnimationFrame(() => focusEl?.focus());
 }
 
 function closeModal(modal = activeModal) {
@@ -119,20 +158,40 @@ function closeModal(modal = activeModal) {
   }
 }
 
+// ============================================================================
+// RENDU VISUEL & STATISTIQUES
+// ============================================================================
+
+function updateViewChrome() {
+  if (viewMode === "file" && selectedFile) {
+    if (viewBadge) viewBadge.textContent = `vue : ${selectedFile}`;
+    if (modeHint) modeHint.textContent = `Mode fichier « ${selectedFile} ».`;
+    if (createSubtitle) createSubtitle.textContent = `Insertion dans « ${selectedFile} » via POST /api/insert.`;
+  } else {
+    if (viewBadge) viewBadge.textContent = `vue : mémoire (${activeCollection})`;
+    if (modeHint) modeHint.textContent = `Mode mémoire serveur — visualisation \`/buckets\`, CRUD \`/keys\`.`;
+    if (createSubtitle) createSubtitle.textContent = `Ajoute une paire clé / valeur dans ${activeCollection}.`;
+  }
+}
+
 function renderEntry(entry) {
   const safeKey = escapeHtml(entry.key);
   const safeValue = escapeHtml(entry.value ?? "");
   const encoded = encodeURIComponent(entry.key);
+  const liveActions =
+    viewMode === "live"
+      ? `
+        <button class="btn btn--ghost btn--sm" type="button" data-view="${encoded}">Voir</button>
+        <button class="btn btn--ghost btn--sm" type="button" data-edit="${encoded}">Éditer</button>
+        <button class="btn btn--danger btn--sm" type="button" data-delete="${encoded}">Suppr.</button>
+      `
+      : `<span class="field__hint">Lecture fichier</span>`;
 
   return `
     <article class="entry-card">
       <div class="entry-card__key">${safeKey}</div>
       <div class="entry-card__value">${safeValue}</div>
-      <div class="entry-card__actions">
-        <button class="btn btn--ghost btn--sm" type="button" data-view="${encoded}">Voir</button>
-        <button class="btn btn--ghost btn--sm" type="button" data-edit="${encoded}">Éditer</button>
-        <button class="btn btn--danger btn--sm" type="button" data-delete="${encoded}">Suppr.</button>
-      </div>
+      <div class="entry-card__actions">${liveActions}</div>
     </article>
   `;
 }
@@ -156,7 +215,6 @@ function renderBucket(bucket, animClass, delayIndex) {
   return `
     <article
       class="bucket bucket--${bucket.type} ${animClass}"
-      data-bucket-index="${bucket.index}"
       style="animation-delay: ${Math.min(delayIndex, 16) * 28}ms"
       aria-label="Bucket ${bucket.index}, ${stateLabel(bucket.type)}"
     >
@@ -174,17 +232,62 @@ function renderBucket(bucket, animClass, delayIndex) {
 function updateStats(snapshot) {
   const ratio = snapshot.loadLimit > 0 ? snapshot.load / snapshot.loadLimit : 0;
   const percent = Math.min(100, Math.round(ratio * 100));
+  const label =
+    viewMode === "file" && selectedFile
+      ? `${snapshot.length} buckets · ${selectedFile}`
+      : `${snapshot.length} buckets · ${activeCollection}`;
 
   statLength.textContent = String(snapshot.length);
   statLoad.textContent = String(snapshot.load);
   statOccupied.textContent = String(snapshot.occupied);
   statCollisions.textContent = String(snapshot.collisions);
-  bucketsMeta.textContent = `${snapshot.length} buckets`;
+  bucketsMeta.textContent = label;
 
   loadFill.style.width = `${percent}%`;
   loadFill.classList.toggle("is-hot", percent >= 85);
   loadRatio.textContent = `${snapshot.load} / ${snapshot.loadLimit} (${percent}%)`;
 }
+
+function paintSnapshot(snapshot, { resetAnim = false } = {}) {
+  updateStats(snapshot);
+
+  if (!Array.isArray(snapshot.buckets) || snapshot.buckets.length === 0) {
+    bucketsGrid.innerHTML = `<p class="empty-state">Aucun bucket disponible.</p>`;
+    previousSnapshot = snapshot;
+    return;
+  }
+
+  const prevMap = new Map(
+    (!resetAnim && previousSnapshot?.buckets ? previousSnapshot.buckets : []).map(
+      (bucket) => [bucket.index, bucketSignature(bucket)]
+    )
+  );
+  
+  const sizeChanged = !resetAnim && previousSnapshot && previousSnapshot.length !== snapshot.length;
+  const isFirst = resetAnim || !previousSnapshot;
+
+  bucketsGrid.innerHTML = snapshot.buckets
+    .map((bucket, index) => {
+      const signature = bucketSignature(bucket);
+      const previous = prevMap.get(bucket.index);
+      let animClass = "";
+
+      if (isFirst) animClass = "is-enter";
+      else if (sizeChanged) animClass = "is-rehash";
+      else if (previous !== signature) {
+        animClass = bucket.type === "empty" ? "is-enter" : "is-changed";
+      }
+
+      return renderBucket(bucket, animClass, index);
+    })
+    .join("");
+
+  previousSnapshot = snapshot;
+}
+
+// ============================================================================
+// FETCH DATA
+// ============================================================================
 
 async function checkHealth() {
   try {
@@ -201,45 +304,8 @@ async function checkHealth() {
 async function loadBuckets({ quiet = false } = {}) {
   return keepScroll(async () => {
     try {
-      // AJOUT : Passage de activeCollection
       const snapshot = await api.getBuckets(activeCollection);
-      updateStats(snapshot);
-
-      if (!Array.isArray(snapshot.buckets) || snapshot.buckets.length === 0) {
-        bucketsGrid.innerHTML = `<p class="empty-state">Aucun bucket disponible.</p>`;
-        previousSnapshot = snapshot;
-        return;
-      }
-
-      const prevMap = new Map(
-        (previousSnapshot?.buckets || []).map((bucket) => [
-          bucket.index,
-          bucketSignature(bucket),
-        ])
-      );
-      const sizeChanged =
-        previousSnapshot && previousSnapshot.length !== snapshot.length;
-      const isFirst = !previousSnapshot;
-
-      bucketsGrid.innerHTML = snapshot.buckets
-        .map((bucket, index) => {
-          const signature = bucketSignature(bucket);
-          const previous = prevMap.get(bucket.index);
-          let animClass = "";
-
-          if (isFirst) {
-            animClass = "is-enter";
-          } else if (sizeChanged) {
-            animClass = "is-rehash";
-          } else if (previous !== signature) {
-            animClass = bucket.type === "empty" ? "is-enter" : "is-changed";
-          }
-
-          return renderBucket(bucket, animClass, index);
-        })
-        .join("");
-
-      previousSnapshot = snapshot;
+      paintSnapshot(snapshot);
     } catch (error) {
       if (!quiet) {
         bucketsGrid.innerHTML = `<p class="empty-state">Impossible de charger les buckets de ${activeCollection}.</p>`;
@@ -249,8 +315,150 @@ async function loadBuckets({ quiet = false } = {}) {
   });
 }
 
+async function loadLiveBuckets({ quiet = false, resetAnim = false } = {}) {
+  return keepScroll(async () => {
+    try {
+      const snapshot = await api.getBuckets(activeCollection);
+      paintSnapshot(snapshot, { resetAnim });
+    } catch (error) {
+      if (!quiet) {
+        bucketsGrid.innerHTML = `<p class="empty-state">Impossible de charger les buckets de ${activeCollection}.</p>`;
+        showToast(error.message, "error");
+      }
+    }
+  });
+}
+
+async function loadFileBuckets(filename, { quiet = false, resetAnim = true } = {}) {
+  return keepScroll(async () => {
+    try {
+      const collection = await api.getFile(filename);
+      const snapshot = snapshotFromCollection(collection);
+      viewMode = "file";
+      selectedFile = filename;
+      paintSnapshot(snapshot, { resetAnim });
+      if (filesList) await loadFiles();
+    } catch (error) {
+      if (!quiet) showToast(error.message, "error");
+    }
+  });
+}
+
+async function discoverFiles() {
+  let fromApi = [];
+  try {
+    const data = await api.listFiles();
+    if (Array.isArray(data)) {
+      fromApi = data.filter((name) => typeof name === "string" && name.endsWith(".json"));
+    }
+  } catch {}
+
+  const candidates = [...new Set([...fromApi, ...DEFAULT_FILES, ...getKnownFiles()])].filter(
+    (name) => typeof name === "string" && name.endsWith(".json")
+  );
+
+  const existing = [];
+  await Promise.all(
+    candidates.map(async (name) => {
+      try {
+        await api.getFile(name);
+        existing.push(name);
+        rememberFile(name);
+      } catch {
+        forgetFile(name);
+      }
+    })
+  );
+
+  return existing.sort((a, b) => a.localeCompare(b));
+}
+
+function renderFiles(files) {
+  if (!filesCount || !filesList) return;
+  filesCount.textContent = `${files.length} fichier${files.length > 1 ? "s" : ""}`;
+
+  if (!files.length) {
+    filesList.innerHTML = `<p class="empty-state">Aucun fichier JSON détecté.</p>`;
+    return;
+  }
+
+  filesList.innerHTML = files
+    .map((name) => {
+      const safe = escapeHtml(name);
+      const encoded = encodeURIComponent(name);
+      const isActive = viewMode === "file" && selectedFile === name;
+      return `
+        <div class="file-item ${isActive ? "is-active" : ""}">
+          <button class="file-item__main" type="button" data-select-file="${encoded}">
+            <span class="file-item__name">${safe}</span>
+            <span class="file-item__meta">${isActive ? "affiché" : "ouvrir"}</span>
+          </button>
+          <div class="file-item__actions">
+            <button class="btn btn--ghost btn--sm" type="button" data-preview-file="${encoded}">JSON</button>
+            <button class="btn btn--danger btn--sm" type="button" data-delete-file="${encoded}">Suppr.</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+async function loadFiles() {
+  if (!filesList) return;
+  try {
+    const files = await discoverFiles();
+    renderFiles(files);
+  } catch (error) {
+    filesList.innerHTML = `<p class="empty-state">Impossible de lister les fichiers.</p>`;
+    showToast(error.message, "error");
+  }
+}
+
+// ============================================================================
+// ACTIONS UTILISATEUR & MODALES (CRUD)
+// ============================================================================
+
+async function switchToLive() {
+  viewMode = "live";
+  selectedFile = null;
+  updateViewChrome();
+  await Promise.all([loadFiles(), loadLiveBuckets({ resetAnim: true })]);
+  showToast("Vue mémoire serveur", "info");
+}
+
+async function deleteFile(filename) {
+  const confirmed = window.confirm(`Supprimer le fichier « ${filename} » ?`);
+  if (!confirmed) return;
+
+  try {
+    await api.deleteFile(filename);
+    forgetFile(filename);
+    showToast(`Fichier « ${filename} » supprimé`, "success");
+
+    if (viewMode === "file" && selectedFile === filename) {
+      await switchToLive();
+    } else {
+      await loadFiles();
+    }
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
+async function previewFile(filename) {
+  try {
+    const content = await api.getFile(filename);
+    previewSubtitle.textContent = filename;
+    previewContent.textContent = JSON.stringify(content, null, 2);
+    openModal(modalPreview);
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
 function openCreateModal() {
   createForm.reset();
+  updateViewChrome();
   openModal(modalCreate, createKey);
 }
 
@@ -268,9 +476,12 @@ function openLookupModal(prefill = "") {
   openModal(modalLookup, lookupKey);
 }
 
+function openSeedModal() {
+  openModal(modalSeed, seedCount);
+}
+
 async function openEditForKey(key) {
   try {
-    // AJOUT : Passage de activeCollection
     const entry = await api.getOne(activeCollection, key);
     openEditModal(entry.key, entry.value ?? "");
   } catch (error) {
@@ -297,6 +508,23 @@ function renderLookupResult(entry) {
   `;
 }
 
+// ============================================================================
+// ECOUTEURS D'EVENEMENTS GLOBAUX
+// ============================================================================
+
+if (collectionSelect) {
+  collectionSelect.addEventListener("change", async (e) => {
+    activeCollection = e.target.value;
+    if (activeCollectionBadge) activeCollectionBadge.textContent = activeCollection;
+    previousSnapshot = null; 
+    showToast(`Changement vers la collection : ${activeCollection}`, "info");
+    updateViewChrome();
+    if (viewMode === "live") {
+      await loadBuckets();
+    }
+  });
+}
+
 document.querySelectorAll("[data-open-modal]").forEach((button) => {
   button.addEventListener("click", () => {
     const name = button.getAttribute("data-open-modal");
@@ -311,54 +539,78 @@ document.querySelectorAll("[data-open-modal]").forEach((button) => {
 
 document.querySelectorAll(".modal").forEach((modal) => {
   modal.addEventListener("click", (event) => {
-    if (event.target.closest("[data-close-modal]")) {
-      closeModal(modal);
-    }
+    if (event.target.closest("[data-close-modal]")) closeModal(modal);
   });
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && activeModal) {
-    closeModal(activeModal);
-  }
+  if (event.key === "Escape" && activeModal) closeModal(activeModal);
 });
 
-// NOUVEAU: Formulaire de création de collection
-newCollectionForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const name = collectionNameInput.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
-  const isPersistent = collectionPersistInput.checked;
+// ============================================================================
+// SOUMISSION DES FORMULAIRES
+// ============================================================================
 
-  if (!name) {
-    showToast("Le nom est obligatoire et doit être valide", "error");
-    return;
-  }
-
-  collectionSubmit.disabled = true;
-  try {
-    await api.createCollection(name, isPersistent);
-    
-    // Ajoute l'option au select si elle n'y est pas déjà
-    let optionExists = Array.from(collectionSelect.options).some(opt => opt.value === name);
-    if (!optionExists) {
-      const option = document.createElement("option");
-      option.value = name;
-      option.textContent = `Collection: ${name}`;
-      collectionSelect.appendChild(option);
+if (createFileForm) {
+  createFileForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    let filename = newFilename.value.trim();
+    if (!filename) {
+      showToast("Nom de fichier requis", "error");
+      return;
     }
-    
-    // Bascule automatiquement sur la nouvelle collection
-    collectionSelect.value = name;
-    collectionSelect.dispatchEvent(new Event("change"));
+    if (!filename.endsWith(".json")) filename = `${filename}.json`;
 
-    closeModal(modalNewCollection);
-    showToast(`Collection « ${name} » créée`, "success");
-  } catch (error) {
-    showToast(error.message, "error");
-  } finally {
-    collectionSubmit.disabled = false;
-  }
-});
+    createFileSubmit.disabled = true;
+    try {
+      await api.createFile(filename);
+      rememberFile(filename);
+      newFilename.value = "";
+      showToast(`Fichier « ${filename} » créé`, "success");
+      await loadFiles();
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      createFileSubmit.disabled = false;
+    }
+  });
+}
+
+if (newCollectionForm) {
+  newCollectionForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = collectionNameInput.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    const isPersistent = collectionPersistInput.checked;
+
+    if (!name) {
+      showToast("Le nom est obligatoire et doit être valide", "error");
+      return;
+    }
+
+    collectionSubmit.disabled = true;
+    try {
+      await api.createCollection(name, isPersistent);
+      
+      let optionExists = Array.from(collectionSelect.options).some(opt => opt.value === name);
+      if (!optionExists) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = `Collection: ${name}`;
+        collectionSelect.appendChild(option);
+      }
+      
+      collectionSelect.value = name;
+      collectionSelect.dispatchEvent(new Event("change"));
+
+      closeModal(modalNewCollection);
+      showToast(`Collection « ${name} » créée`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      collectionSubmit.disabled = false;
+    }
+  });
+}
 
 createForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -372,11 +624,10 @@ createForm.addEventListener("submit", async (event) => {
 
   createSubmit.disabled = true;
   try {
-    // AJOUT : Passage de activeCollection
     await api.create(activeCollection, key, value);
     closeModal(modalCreate);
-    showToast(`Clé « ${key} » créée dans ${activeCollection}`, "success");
-    await loadBuckets();
+    showToast(`Clé « ${key} » créée`, "success");
+    if (viewMode === "live") await loadLiveBuckets();
   } catch (error) {
     showToast(error.message, "error");
   } finally {
@@ -396,11 +647,10 @@ editForm.addEventListener("submit", async (event) => {
 
   editSubmit.disabled = true;
   try {
-    // AJOUT : Passage de activeCollection
     await api.update(activeCollection, key, value);
     closeModal(modalEdit);
     showToast(`Clé « ${key} » mise à jour`, "success");
-    await loadBuckets();
+    if (viewMode === "live") await loadLiveBuckets();
   } catch (error) {
     showToast(error.message, "error");
   } finally {
@@ -418,7 +668,6 @@ lookupForm.addEventListener("submit", async (event) => {
 
   lookupSubmit.disabled = true;
   try {
-    // AJOUT : Passage de activeCollection
     const entry = await api.getOne(activeCollection, key);
     renderLookupResult(entry);
   } catch (error) {
@@ -433,22 +682,45 @@ lookupForm.addEventListener("submit", async (event) => {
   }
 });
 
+// ============================================================================
+// DELEGATION D'EVENEMENTS (Clics dynamiques)
+// ============================================================================
+
 async function handleDelete(key) {
   const confirmed = window.confirm(`Supprimer la clé « ${key} » de la collection ${activeCollection} ?`);
   if (!confirmed) return;
 
   try {
-    // AJOUT : Passage de activeCollection
     await api.remove(activeCollection, key);
     if (activeModal === modalLookup) closeModal(modalLookup);
     showToast(`Clé « ${key} » supprimée`, "success");
-    await loadBuckets();
+    if (viewMode === "live") await loadLiveBuckets();
   } catch (error) {
     showToast(error.message, "error");
   }
 }
 
 document.body.addEventListener("click", async (event) => {
+  const selectBtn = event.target.closest("[data-select-file]");
+  if (selectBtn) {
+    const filename = decodeURIComponent(selectBtn.getAttribute("data-select-file"));
+    await loadFileBuckets(filename);
+    showToast(`Fichier affiché : ${filename}`, "info");
+    return;
+  }
+
+  const previewBtn = event.target.closest("[data-preview-file]");
+  if (previewBtn) {
+    await previewFile(decodeURIComponent(previewBtn.getAttribute("data-preview-file")));
+    return;
+  }
+
+  const deleteFileBtn = event.target.closest("[data-delete-file]");
+  if (deleteFileBtn) {
+    await deleteFile(decodeURIComponent(deleteFileBtn.getAttribute("data-delete-file")));
+    return;
+  }
+
   const editBtn = event.target.closest("[data-edit]");
   if (editBtn) {
     const key = decodeURIComponent(editBtn.getAttribute("data-edit"));
@@ -463,7 +735,6 @@ document.body.addEventListener("click", async (event) => {
     openLookupModal(key);
     lookupSubmit.disabled = true;
     try {
-      // AJOUT : Passage de activeCollection
       const entry = await api.getOne(activeCollection, key);
       renderLookupResult(entry);
     } catch (error) {
@@ -481,17 +752,33 @@ document.body.addEventListener("click", async (event) => {
 
   const deleteBtn = event.target.closest("[data-delete]");
   if (deleteBtn) {
-    const key = decodeURIComponent(deleteBtn.getAttribute("data-delete"));
-    await handleDelete(key);
+    await handleDelete(decodeURIComponent(deleteBtn.getAttribute("data-delete")));
   }
 });
 
+if (liveBtn) {
+  liveBtn.addEventListener("click", async () => {
+    await switchToLive();
+  });
+}
+
 refreshBtn.addEventListener("click", async () => {
   refreshBtn.disabled = true;
-  await Promise.all([checkHealth(), loadBuckets()]);
+  await checkHealth();
+  if (filesList) await loadFiles();
+  
+  if (viewMode === "file" && selectedFile) {
+    await loadFileBuckets(selectedFile, { resetAnim: false });
+  } else {
+    await loadLiveBuckets();
+  }
+  
   refreshBtn.disabled = false;
   showToast("Vue actualisée", "info");
 });
 
+// Initialisation
+updateViewChrome();
 checkHealth();
+if (filesList) loadFiles();
 loadBuckets();
