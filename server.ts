@@ -33,12 +33,9 @@ async function main() {
     
     const insertionWorker = new InsertionWorker(aggregator, dataSeeder);
     
-    // Préchargement de la collection par défaut au démarrage
     await aggregator.loadCollectionFromFile('cache');
 
-    // --- INITIALISATION DES CONTRÔLEURS ---
     const hashMapController = MyHashMapController(aggregator);
-    // On passe l'agrégateur aux autres services/contrôleurs pour qu'ils partagent la même RAM
     const loadTestService = new LoadTestService(aggregator);
     const loadTestController = LoadTestController(loadTestService);
     const dataSeedController = DataSeedController(dataSeeder, insertionWorker);
@@ -86,6 +83,7 @@ async function main() {
     fastify.post('/api/insert', dataStorageController.insert);
 
     // --- ROUTES SEEDER (Issues de origin/UI) ---
+    fastify.get('/api/seeds', dataSeedController.listSeeds); 
     fastify.get('/data-seeder', dataSeedController.seedFile);
     fastify.get('/seed', dataSeedController.processSeed);
 

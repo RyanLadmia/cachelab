@@ -42,15 +42,18 @@ export default class LoadTestService {
                 collection = await this.aggregator.loadCollectionFromFile(collectionName);
             }
 
+            // MODIFICATION ICI : On prépare les données dans un tableau
+            const itemsToInsert = [];
             for (let i = 0; i < params.entries; i++) {
                 const key = `stress-${stamp}-${i}`;
-                await this.aggregator.insert(collectionName, { key, value: String(i) });
+                itemsToInsert.push({ key, value: String(i) });
                 if (i === 0) sampleKey = key;
                 seeded++;
             }
 
-            if (seeded > 0) {
-                await this.aggregator.saveCollection(collectionName);
+            // MODIFICATION ICI : On appelle insertMany en une seule fois
+            if (itemsToInsert.length > 0) {
+                await this.aggregator.insertMany(collectionName, itemsToInsert);
             }
 
             if (!sampleKey) {

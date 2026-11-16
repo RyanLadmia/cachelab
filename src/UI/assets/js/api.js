@@ -109,15 +109,18 @@ export const api = {
     });
   },
 
-  generateSeed(numberOfInsertion) {
-    return request(
-      `/data-seeder?numberOfInsertion=${encodeURIComponent(numberOfInsertion)}`
-    );
+listSeeds() {
+    return request("/api/seeds");
   },
 
-  runSeed() {
-    return request("/seed");
+  generateSeed(collection, count) {
+    return request(`/data-seeder?numberOfInsertion=${count}&collection=${encodeURIComponent(collection)}`);
   },
+
+  runSeed(collection, seedFile = "init.json") {
+    return request(`/seed?collection=${encodeURIComponent(collection)}&seedFile=${encodeURIComponent(seedFile)}`);
+  },
+
 
   runLoadTest({ entries, connections, duration }) {
     return request("/api/load-test", {

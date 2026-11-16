@@ -8,6 +8,16 @@ export default class DataSeeder {
 
     public DATA_FILE: string = "init.json"; // by default
 
+async listSeedFiles(): Promise<string[]> {
+        try {
+            await fs.mkdir(this.DATA_DIR, { recursive: true });
+            const files = await fs.readdir(this.DATA_DIR);
+            return files.filter(file => file.endsWith(".json"));
+        } catch {
+            return [];
+        }
+    }
+
     async seedFile(numberOfInsertion: number) { // multiple de 8
         try {
             console.log(numberOfInsertion, "numberOfInsertion");

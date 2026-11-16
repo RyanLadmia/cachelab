@@ -2,7 +2,6 @@ import HashMap from "./hashmap.service";
 import DataStorage from "./data-storage.service";
 import path from "path";
 import { Bucket, HashmapValue } from "../types/hashmap.types";
-import CollectionIterator from "../iterators/CollectionIterator";
 
 interface ManagedCollection<K extends PropertyKey, V> {
     map: HashMap<K, V>;
@@ -44,7 +43,6 @@ export default class Aggregator<K extends PropertyKey, V> {
         
         const parsedData = await managed.storage.load();
         if (parsedData) {
-            // Injecte les données du fichier dans la RAM
             managed.map.loadRawData(parsedData as Bucket<K, V>[]);
         }
         return managed.map;
@@ -67,6 +65,20 @@ export default class Aggregator<K extends PropertyKey, V> {
             if (managed.unsavedInsertions >= this.BATCH_SAVE_LIMIT) {
                 await this.saveCollection(name);
             }
+        }
+    }
+
+    public async insertMany(name: string, items: HashmapValue<K, V>[]): Promise<void> {
+        const managed = this.collections[name];
+        if (!managed) throw new Error(`La collection ${name} est introuvable.`);
+
+        for (const item of items) {
+            managed.map.insert(item);
+        }
+
+        if (managed.isPersistent) {
+            managed.unsavedInsertions = 0;
+            await this.saveCollection(name);
         }
     }
 
@@ -98,7 +110,6 @@ export default class Aggregator<K extends PropertyKey, V> {
         const managed = this.collections[name];
         if (!managed || !managed.isPersistent) return;
 
-        // Récupère de la RAM et l'écrase sur le Disque
         await managed.storage.save(managed.map.rawData);
         
         if (managed.unsavedInsertions > 0) {

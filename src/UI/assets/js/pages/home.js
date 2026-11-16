@@ -6,6 +6,7 @@ const FILES_STORAGE_KEY = "cachelab.files";
 const DEFAULT_FILES = ["cache.json", "init.json"];
 
 // --- DOM ELEMENTS : Fichiers & Vues ---
+const seedFileSelect = document.getElementById("seed-file-select");
 const bucketsGrid = document.getElementById("buckets-grid");
 const bucketsMeta = document.getElementById("buckets-meta");
 const healthBadge = document.getElementById("health-badge");
@@ -216,6 +217,18 @@ function renderEntry(entry) {
       <div class="entry-card__actions">${liveActions}</div>
     </article>
   `;
+}
+
+async function loadSeedFilesList() {
+  if (!seedFileSelect) return;
+  try {
+    const seeds = await api.listSeeds();
+    seedFileSelect.innerHTML = seeds.length > 0 
+      ? seeds.map(file => `<option value="${escapeHtml(file)}">${escapeHtml(file)}</option>`).join("")
+      : `<option value="init.json">init.json</option>`;
+  } catch {
+    seedFileSelect.innerHTML = `<option value="init.json">init.json</option>`;
+  }
 }
 
 function renderBucket(bucket, animClass, delayIndex) {
@@ -587,6 +600,7 @@ function renderLookupResult(entry) {
   `;
 }
 
+
 // ============================================================================
 // ECOUTEURS D'EVENEMENTS GLOBAUX
 // ============================================================================
@@ -613,7 +627,10 @@ document.querySelectorAll("[data-open-modal]").forEach((button) => {
        newCollectionForm.reset();
        openModal(modalNewCollection, collectionNameInput);
     }
-    if (name === "seed") openSeedModal();
+    if (name === "seed") {
+      openSeedModal();
+      loadSeedFilesList(); // <--- C'est ici qu'il fallait l'appeler !
+    }
     if (name === "loadtest") openLoadTestModal();
   });
 });
@@ -769,9 +786,10 @@ if (seedForm) {
     const count = Number(seedCount.value);
     seedGenerate.disabled = true;
     try {
-      const result = await api.generateSeed(count);
+      // On passe activeCollection
+      const result = await api.generateSeed(activeCollection, count);
       if (result?.success === false) throw new Error("Génération du seed échouée");
-      showToast(`Seed généré (${count} entrées)`, "success");
+      showToast(`Seed prêt pour ${activeCollection} (${count} entrées)`, "success");
     } catch (error) {
       showToast(error.message, "error");
     } finally {
@@ -779,17 +797,19 @@ if (seedForm) {
     }
   });
 }
-
 if (seedRun) {
   seedRun.addEventListener("click", async () => {
     seedRun.disabled = true;
     try {
-      const result = await api.runSeed();
-      showToast(result.message || "Seed terminé", result.success ? "success" : "error");
-      rememberFile("cache.json");
+      const selectedSeedFile = seedFileSelect ? seedFileSelect.value : "init.json";
+      
+      const result = await api.runSeed(activeCollection, selectedSeedFile);
+      showToast(result.message || "Injection réussie", result.success ? "success" : "error");
+      
+      rememberFile(`${activeCollection}.json`);
       if (viewMode === "live") await loadLiveBuckets({ resetAnim: true });
-      else if (selectedFile === "cache.json") {
-        await loadFileBuckets("cache.json", { resetAnim: true });
+      else if (selectedFile === `${activeCollection}.json`) {
+        await loadFileBuckets(`${activeCollection}.json`, { resetAnim: true });
       }
       await loadFiles();
     } catch (error) {
